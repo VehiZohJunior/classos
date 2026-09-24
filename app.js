@@ -204,10 +204,11 @@
       html += '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Rechercher un étudiant…" autocomplete="off"></div><div class="list" id="list"></div>';
     }
     html += '<div class="divider"></div><div class="btn-row">' +
-      '<button class="btn btn-ghost" id="printBtn"' + (cls.students.length ? '' : ' disabled') + '>' + ICON.print + 'Fiche papier</button>' +
+      '<button class="btn btn-ghost" id="printBtn"' + (cls.students.length ? '' : ' disabled') + '>' + ICON.print + 'Liste papier</button>' +
+      '<button class="btn btn-ghost" id="blankBtn">' + ICON.print + 'Formulaires vierges</button>' +
       '<button class="btn btn-ghost" id="renameBtn">Renommer</button>' +
       '<button class="btn btn-danger-ghost" id="delClassBtn">Supprimer la classe</button></div>' +
-      '<p class="tiny" style="margin-top:10px">« Fiche papier » imprime la liste des contacts : gardez-en une copie dans la salle en cas de panne de téléphone.</p>';
+      '<p class="tiny" style="margin-top:10px">« Liste papier » imprime les contacts de la classe : gardez-en une copie dans la salle en cas de panne de téléphone. « Formulaires vierges » imprime 3 fiches à remplir à la main, pour les étudiants sans smartphone : saisissez-les ensuite avec « Saisie manuelle ».</p>';
     view.innerHTML = html;
 
     if (cls.students.length) {
@@ -219,6 +220,7 @@
     $('manualBtn').onclick = function () { studentForm(cls); };
     $('pasteBtn').onclick = function () { pasteModal(cls); };
     $('printBtn').onclick = function () { printClass(cls); };
+    $('blankBtn').onclick = function () { printBlank(cls); };
     $('renameBtn').onclick = function () { newClassModal(cls); };
     $('delClassBtn').onclick = function () {
       if (!confirm('Supprimer la classe « ' + cls.name + ' » et ses ' + cls.students.length + ' fiche(s) ?\n\nCette action est définitive.')) return;
@@ -524,6 +526,20 @@
       '<div class="p-sub">' + esc(db.settings.school || '') + (db.settings.teacher ? ' · Enseignant(e) : ' + esc(db.settings.teacher) : '') + ' · Édité le ' + new Date().toLocaleDateString('fr-FR') + ' · <b>' + esc(ns) + '</b></div>' +
       '<table><thead><tr><th style="width:24%">Étudiant</th><th style="width:40%">Personnes à prévenir</th><th style="width:8%">Groupe</th><th>Infos médicales</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="p-foot">Document CONFIDENTIEL — à usage exclusif en cas d\'urgence. Ne pas afficher. À détruire en fin d\'année. Généré avec ClasSos.</div>';
+    window.print();
+  }
+
+  function printBlank(cls) {
+    var line = function (label) { return '<div class="b-line"><span>' + label + '</span><i></i></div>'; };
+    var slip = '<div class="b-slip">' +
+      '<div class="b-head"><b>Fiche contact d’urgence</b><span>' + esc(cls.name) + (db.settings.school ? ' · ' + esc(db.settings.school) : '') + '</span></div>' +
+      '<div class="b-grid">' + line('Nom') + line('Prénom(s)') + '</div>' +
+      '<div class="b-sub">Personne à prévenir n°1</div><div class="b-grid3">' + line('Nom complet') + line('Lien') + line('Téléphone') + '</div>' +
+      '<div class="b-sub">Personne à prévenir n°2 (conseillé)</div><div class="b-grid3">' + line('Nom complet') + line('Lien') + line('Téléphone') + '</div>' +
+      '<div class="b-grid">' + line('Groupe sanguin (facultatif)') + line('Allergie / maladie / traitement (facultatif)') + '</div>' +
+      '<div class="b-consent">☐ J’accepte que mon enseignant conserve ces informations uniquement pour prévenir mes proches ou les secours en cas d’urgence. Je peux lui demander de les supprimer à tout moment.<span>Signature : ____________________</span></div>' +
+      '</div>';
+    $('printSheet').innerHTML = slip + slip + slip;
     window.print();
   }
 

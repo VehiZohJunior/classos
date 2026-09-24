@@ -110,6 +110,11 @@
         </div>
       </fieldset>
 
+      <label class="check" id="sharedBox" style="margin-bottom:10px">
+        <input type="checkbox" id="shared">
+        <span><b>Ce téléphone n'est pas le mien</b> (téléphone prêté par un camarade ou l'enseignant). Ma fiche ne sera pas gardée dessus.</span>
+      </label>
+
       <label class="check" id="consentBox">
         <input type="checkbox" id="consent">
         <span>J'accepte que mon enseignant conserve ces informations <b>uniquement</b> pour prévenir mes proches ou les secours en cas d'urgence. Je peux lui demander de les supprimer à tout moment.</span>
@@ -138,6 +143,10 @@
     </div>
     <p class="tiny" style="text-align:center;margin-top:14px">Le scanner ne fonctionne pas ? Appuyez sur « Copier mon code » et envoyez-le à votre enseignant (WhatsApp, SMS…).</p>
     <div style="text-align:center;margin-top:8px"><button class="btn btn-danger-ghost" id="wipeBtn" type="button">Effacer ma fiche de ce téléphone</button></div>
+    <div id="nextBox" hidden>
+      <div class="notice warn" style="margin-top:16px"><span><b>Téléphone prêté :</b> votre fiche n'est pas enregistrée sur ce téléphone. Une fois le QR code scanné par l'enseignant, passez au suivant.</span></div>
+      <button class="btn btn-primary btn-block btn-lg" id="nextBtn" type="button">Terminé : étudiant suivant</button>
+    </div>
   </section>
 </main>
 
@@ -207,7 +216,10 @@
     };
   }
 
-  function showQR(f) {
+  function showQR(f, shared) {
+    $('nextBox').hidden = !shared;
+    $('wipeBtn').parentNode.hidden = !!shared;
+    $('editBtn').textContent = shared ? 'Corriger la fiche' : 'Modifier ma fiche';
     var code = SOS.encodeFiche(f);
     $('qrBox').innerHTML = SOS.qrImg(code, 8);
     $('qrWho').textContent = f.prenom + ' ' + f.nom + (f.classe ? ' — ' + f.classe : '');
@@ -225,7 +237,9 @@
     e.preventDefault();
     var f = readForm();
     if (!f) return;
-    save(f); showQR(f);
+    var shared = $('shared').checked;
+    if (shared) { try { localStorage.removeItem(KEY); } catch (err) {} } else save(f);
+    showQR(f, shared);
   });
   document.querySelectorAll('#form input, #form select').forEach(function (el) {
     el.addEventListener('input', function () { var fl = el.closest('.field'); if (fl) fl.classList.remove('invalid'); });
@@ -233,6 +247,13 @@
   $('consent').addEventListener('change', function () { if ($('consent').checked) $('consentErr').style.display = 'none'; });
 
   $('editBtn').onclick = function () { $('qrView').hidden = true; $('formView').hidden = false; window.scrollTo(0, 0); };
+  $('nextBtn').onclick = function () {
+    $('form').reset(); if (urlClass) $('classe').value = urlClass;
+    $('shared').checked = true;
+    $('qrBox').innerHTML = '';
+    $('qrView').hidden = true; $('formView').hidden = false;
+    window.scrollTo(0, 0); $('nom').focus();
+  };
   $('wipeBtn').onclick = function () {
     if (!confirm('Effacer votre fiche de ce téléphone ?\n(Cela ne supprime pas la copie déjà scannée par votre enseignant.)')) return;
     try { localStorage.removeItem(KEY); } catch (e) {}
