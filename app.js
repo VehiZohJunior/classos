@@ -170,6 +170,7 @@
   function setHeader(title, sub, back) {
     $('title').innerHTML = esc(title) + (sub ? '<span class="sub">' + esc(sub) + '</span>' : '');
     $('backBtn').hidden = !back;
+    $('homeBtn').hidden = !back;
     $('brandMark').hidden = !!back;
     document.title = (title === 'ClasSos' ? '' : title + ' — ') + 'ClasSos';
   }
@@ -197,10 +198,24 @@
     return renderHome(view);
   }
   window.addEventListener('hashchange', route);
+
+  /* Retour : une fiche d'urgence revient à l'écran d'où on l'a ouverte (classe, répertoire, urgence) */
+  var sheetFrom = '';
+  window.addEventListener('hashchange', function (e) {
+    var from = (e.oldURL || '').split('#')[1] || '';
+    var to = location.hash.replace(/^#/, '');
+    if (to.indexOf('/s/') === 0 && from && from.indexOf('/s/') !== 0) sheetFrom = from;
+  });
   $('backBtn').onclick = function () {
     var h = location.hash.replace(/^#\/?/, '').split('/');
-    if (h[0] === 's') go('/c/' + h[1]); else go('/');
+    if (h[0] === 's') {
+      if (sheetFrom === '/repertoire' || sheetFrom === '/urgence' || sheetFrom === '/c/' + h[1]) go(sheetFrom);
+      else go('/c/' + h[1]);
+      return;
+    }
+    go('/');
   };
+  $('homeBtn').onclick = function () { go('/'); };
   $('settingsBtn').onclick = function () { go('/reglages'); };
   $('fab').onclick = function () { go('/urgence'); };
 
@@ -816,7 +831,7 @@
 
     html += '<div class="card"><h2>Confidentialité</h2><p class="muted" style="margin:0 0 12px">ClasSos ne possède aucun serveur : aucune fiche n\'est envoyée sur Internet. Les informations servent uniquement à prévenir les proches ou les secours. Supprimez les classes en fin d\'année.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="wipeAll">Effacer toutes les données de ce téléphone</button></div>' +
-      '<p class="tiny" style="text-align:center">ClasSos · version 1.4 · <b>' + SOS.SIGNATURE + '</b></p>';
+      '<p class="tiny" style="text-align:center">ClasSos · version 1.5 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
 
     $('setForm').onsubmit = function (e) {

@@ -28,7 +28,13 @@
   .req { color: var(--red); }
   .send-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .send-grid .btn { min-height: 52px; }
-  .sig { text-align: center; font-size: 12.5px; color: var(--ink-3); margin: 26px 0 0; }
+  .teacher-link {
+    display: flex; align-items: center; justify-content: center; gap: 8px; margin: 26px auto 0; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--navy);
+    font-size: 14px; font-weight: 650; text-decoration: none; text-align: center; max-width: 420px;
+  }
+  .teacher-link svg { width: 18px; height: 18px; flex: none; }
+  .sig { text-align: center; font-size: 12.5px; color: var(--ink-3); margin: 16px 0 0; }
   .sig b { color: var(--ink-2); font-weight: 650; }
 </style>
 </head>
@@ -181,6 +187,10 @@
       <span><b>Fiche terminée.</b> Une erreur ? Seul votre enseignant peut modifier votre fiche : adressez-vous à lui.</span></div>
   </section>
 
+  <a class="teacher-link" href="index.html#/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
+    Vous êtes l'enseignant ? Ouvrir le menu principal de ClasSos
+  </a>
   <p class="sig">ClasSos · <b>Développée par Vehi Zoh J.</b></p>
 </main>
 
