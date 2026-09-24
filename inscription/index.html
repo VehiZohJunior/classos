@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12263F">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:8787 https://*.workers.dev; base-uri 'self'; form-action 'self'">
+<meta name="robots" content="noindex">
+<title>Inscription — ClasSos</title>
+<meta name="description" content="Inscrivez vos contacts d'urgence pour le cours.">
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="inscription.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand-mark"><svg viewBox="0 0 24 24" fill="#fff"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg></div>
+  <h1>Inscription ClasSos<span class="sub" id="hdrClass">Contacts d'urgence</span></h1>
+</header>
+
+<main>
+  <!-- Chargement -->
+  <section id="loadView"><p class="muted" style="text-align:center;padding:40px 0">Chargement…</p></section>
+
+  <!-- Message (lien invalide, pause, hors ligne) -->
+  <section id="msgView" hidden>
+    <div class="empty"><h3 id="msgTitle"></h3><p id="msgText"></p><button class="btn btn-ghost" id="msgRetry" type="button" hidden>Réessayer</button></div>
+  </section>
+
+  <!-- Déjà inscrit(e) sur ce téléphone -->
+  <section id="doneView" hidden>
+    <div class="card ok-card">
+      <div class="ok-ic">✓</div>
+      <h2 id="doneTitle">Vous êtes inscrit(e)</h2>
+      <p class="muted" id="doneText" style="margin:6px 0 0"></p>
+    </div>
+    <div id="doneList"></div>
+    <button class="btn btn-ghost btn-block" id="addOther" type="button">Inscrire une autre personne sur ce téléphone</button>
+    <p class="tiny" style="text-align:center;margin-top:12px">Pour un camarade sans téléphone : remplissez sa fiche avec son accord.</p>
+  </section>
+
+  <!-- Formulaire -->
+  <section id="formView" hidden>
+    <div class="card intro">
+      <b id="introClass"></b>
+      <span id="introTeacher" class="muted"></span>
+      <p class="muted" style="margin:8px 0 0">Votre téléphone sera éteint pendant le cours. En cas de malaise, votre enseignant pourra prévenir tout de suite un proche. <b>1 minute suffit.</b></p>
+    </div>
+    <div class="notice" id="draftNotice" hidden><span style="flex:1">Nous avons repris votre saisie en cours.</span><button class="btn btn-ghost" id="draftReset" type="button" style="min-height:36px;padding:4px 12px">Recommencer</button></div>
+    <div class="notice" id="editNotice" hidden><span>Vous modifiez votre inscription. Enregistrez pour mettre à jour votre fiche chez l'enseignant.</span></div>
+
+    <form id="form" novalidate>
+      <fieldset class="fieldset">
+        <legend>L'étudiant(e)</legend>
+        <div class="grid-2">
+          <div class="field"><label for="nom">Nom <span class="req">*</span></label><input id="nom" autocomplete="family-name" autocapitalize="characters" enterkeyhint="next" maxlength="60"><div class="err">Indiquez le nom.</div></div>
+          <div class="field"><label for="prenom">Prénom(s) <span class="req">*</span></label><input id="prenom" autocomplete="given-name" autocapitalize="words" enterkeyhint="next" maxlength="60"><div class="err">Indiquez le prénom.</div></div>
+        </div>
+        <div class="field"><label for="matricule">Matricule <span class="opt">(facultatif)</span></label><input id="matricule" maxlength="30" autocapitalize="characters" enterkeyhint="next"></div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend>Personne à prévenir n°1 <span class="req">*</span></legend>
+        <div class="field"><label for="c1nom">Nom et prénom</label><input id="c1nom" maxlength="60" autocapitalize="words" enterkeyhint="next" placeholder="Ex : Koffi Aya"><div class="err">Indiquez le nom de la personne.</div></div>
+        <div class="grid-2">
+          <div class="field"><label for="c1lien">Lien avec l'étudiant(e)</label><select id="c1lien"></select><div class="err">Choisissez un lien.</div></div>
+          <div class="field"><label for="c1tel">Téléphone</label><input id="c1tel" type="tel" inputmode="tel" autocomplete="off" enterkeyhint="next" maxlength="22" placeholder="07 07 12 34 56"><div class="err" id="c1telErr">Numéro invalide.</div></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend>Personne à prévenir n°2 <span class="opt tiny">(fortement conseillé)</span></legend>
+        <div class="field"><label for="c2nom">Nom et prénom</label><input id="c2nom" maxlength="60" autocapitalize="words" enterkeyhint="next" placeholder="Si le n°1 ne répond pas"><div class="err">Indiquez le nom de la personne.</div></div>
+        <div class="grid-2">
+          <div class="field"><label for="c2lien">Lien avec l'étudiant(e)</label><select id="c2lien"></select><div class="err">Choisissez un lien.</div></div>
+          <div class="field"><label for="c2tel">Téléphone</label><input id="c2tel" type="tel" inputmode="tel" autocomplete="off" enterkeyhint="next" maxlength="22" placeholder="05 05 99 88 77"><div class="err" id="c2telErr">Numéro invalide.</div></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend>Pour les secours <span class="opt tiny">(facultatif)</span></legend>
+        <div class="field"><label for="sang">Groupe sanguin</label>
+          <select id="sang"><option value="">Je ne sais pas</option><option>A+</option><option>A−</option><option>B+</option><option>B−</option><option>AB+</option><option>AB−</option><option>O+</option><option>O−</option></select></div>
+        <div class="field" style="margin-bottom:10px"><label for="medical">Problème de santé à signaler</label>
+          <div class="chips" id="chips"></div>
+          <textarea id="medical" maxlength="300" placeholder="Précisez si besoin : médicament, allergie, où se trouve le traitement…"></textarea>
+          <div class="hint">Touchez un bouton ou écrivez. Laissez vide si rien à signaler.</div></div>
+      </fieldset>
+
+      <label class="check"><input type="checkbox" id="consent"><span>J'accepte que mon enseignant conserve ces informations <b>uniquement</b> pour prévenir mes proches ou les secours en cas d'urgence. Je peux les modifier ou lui demander de les supprimer.</span></label>
+      <div class="err" id="consentErr" style="color:var(--red);font-size:13px;margin:6px 4px 0;display:none">Cochez cette case pour continuer.</div>
+      <div class="err" id="formErr" style="display:block;color:var(--red);font-size:14px;margin:12px 4px 0"></div>
+
+      <div style="height:14px"></div>
+      <button class="btn btn-red btn-block btn-lg" type="submit" id="submitBtn">Envoyer mon inscription</button>
+      <button class="btn btn-ghost btn-block" type="button" id="cancelEdit" hidden style="margin-top:10px">Annuler la modification</button>
+      <p class="tiny" style="text-align:center;margin-top:12px">🔒 Votre fiche est envoyée uniquement à votre enseignant. Vous pourrez la modifier depuis ce téléphone.</p>
+    </form>
+  </section>
+
+  <a class="teacher-link" href="../admin/">Vous êtes l'enseignant ? Ouvrir la console administrateur</a>
+  <p class="sig">ClasSos · <b>Développée par Vehi Zoh J.</b></p>
+</main>
+
+<script src="../config.js"></script>
+<script src="../common.js"></script>
+<script src="inscription.js"></script>
+</body>
+</html>

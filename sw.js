@@ -1,8 +1,9 @@
 /* ClasSos — service worker : l'appli fonctionne sans Internet */
-var CACHE = 'classos-v9';
+var CACHE = 'classos-v10';
 var FILES = [
-  './', './index.html', './fiche.html', './style.css', './common.js', './app.js',
-  './vendor/qrcode.js', './vendor/jsQR.js', './manifest.webmanifest',
+  './', './index.html', './redirect.js', './style.css', './common.js', './config.js',
+  './admin/', './admin/index.html', './admin/app.js',
+  './vendor/qrcode.js', './manifest.webmanifest',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
 ];
 
@@ -18,7 +19,9 @@ self.addEventListener('activate', function (e) {
 
 /* Réseau d'abord (pour recevoir les mises à jour), cache si hors-ligne */
 self.addEventListener('fetch', function (e) {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  var u = new URL(e.request.url);
+  /* Hors de l'appli (API, autres sites) et espace étudiant / développeur : pas d'interception */
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.indexOf('/inscription/') >= 0 || u.pathname.indexOf('/dev/') >= 0) return;
   e.respondWith(
     /* no-cache : revérifie chaque fichier auprès du serveur (réponse 304 légère si inchangé) pour recevoir les mises à jour immédiatement */
     fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {

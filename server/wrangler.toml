@@ -1,0 +1,11 @@
+name = "classos-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "classos-db"
+database_id = "e2101906-861e-4745-93a9-28c198544791"
+
+[vars]
+ALLOWED_ORIGINS = "https://vehizohjunior.github.io,http://localhost:5210"

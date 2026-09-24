@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12263F">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:8787 https://*.workers.dev; base-uri 'self'; form-action 'self'">
+<title>ClasSos — Console administrateur</title>
+<meta name="description" content="Console de l'enseignant : classes, répertoire d'urgence étudiant, contacts à appeler en un geste.">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icons/icon-192.png">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn" id="backBtn" type="button" aria-label="Retour" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <div class="brand-mark" id="brandMark"><svg viewBox="0 0 24 24" fill="#fff"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg></div>
+  <h1 id="title">ClasSos<span class="sub">Console administrateur</span></h1>
+  <button class="icon-btn" id="homeBtn" type="button" aria-label="Accueil" title="Accueil" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
+  </button>
+  <button class="icon-btn" id="settingsBtn" type="button" aria-label="Réglages" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+  </button>
+</header>
+
+<div id="netBar" class="net-bar" hidden></div>
+<main id="view"></main>
+
+<button class="fab-sos" id="fab" type="button" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg>
+  URGENCE
+</button>
+
+<div id="modalRoot"></div>
+<div class="print-sheet" id="printSheet"></div>
+
+<script src="../config.js"></script>
+<script src="../vendor/qrcode.js"></script>
+<script src="../common.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
