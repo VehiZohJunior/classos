@@ -1,5 +1,5 @@
 /* ClasSos — service worker : l'appli fonctionne sans Internet */
-var CACHE = 'classos-v6';
+var CACHE = 'classos-v7';
 var FILES = [
   './', './index.html', './fiche.html', './style.css', './common.js', './app.js',
   './vendor/qrcode.js', './vendor/jsQR.js', './manifest.webmanifest',
@@ -20,7 +20,8 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then(function (res) {
+    /* no-cache : revérifie chaque fichier auprès du serveur (réponse 304 légère si inchangé) pour recevoir les mises à jour immédiatement */
+    fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {
       if (res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, copy); }); }
       return res;
     }).catch(function () {
