@@ -24,7 +24,8 @@
     { label: 'Police', num: '170' }
   ];
 
-  var LIENS = ['Mère', 'Père', 'Tuteur / Tutrice', 'Conjoint(e)', 'Frère / Sœur', 'Oncle / Tante', 'Ami(e)', 'Colocataire', 'Autre'];
+  var LIENS = ['Mère', 'Père', 'Tuteur / Tutrice', 'Conjoint(e)', 'Frère / Sœur', 'Oncle / Tante', 'Grand-parent', 'Ami(e)', 'Colocataire', 'Autre'];
+  var SIG = '<p class="tiny" style="text-align:center;margin-top:28px">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';
 
   /* ======================= Données ======================= */
   var db = load();
@@ -114,6 +115,7 @@
     if (h[0] === 's' && getStudent(getClass(h[1]), h[2])) return renderSheet(view, getClass(h[1]), getStudent(getClass(h[1]), h[2]));
     if (h[0] === 'urgence') return renderUrgence(view);
     if (h[0] === 'reglages') return renderSettings(view);
+    if (h[0] === 'import') return importFiche(view, h.slice(1).join('/'));
     return renderHome(view);
   }
   window.addEventListener('hashchange', route);
@@ -164,10 +166,38 @@
       });
       html += '</div><div style="height:14px"></div><button class="btn btn-ghost btn-block" id="newClass">' + ICON.plus + 'Nouvelle classe</button>';
     }
-    view.innerHTML = html;
+    view.innerHTML = html + SIG;
     view.querySelectorAll('[data-cls]').forEach(function (b) { b.onclick = function () { go('/c/' + b.dataset.cls); }; });
     var nc = $('newClass'); if (nc) nc.onclick = newClassModal;
     var ib = $('installBtn'); if (ib) ib.onclick = function () { installEvt.prompt(); installEvt = null; };
+  }
+
+  /* Fiche reçue par lien (WhatsApp / SMS) : #/import/CLASSOS1.xxx */
+  function importFiche(view, code) {
+    var f = SOS.decodeFiche(code);
+    try { history.replaceState(null, '', location.pathname + location.search + '#/'); } catch (e) {}
+    renderHome(view);
+    if (!f) { toast('Lien de fiche incomplet ou invalide. Demandez à l’étudiant de le renvoyer.', 'err'); return; }
+    var match = db.classes.filter(function (c) { return f.classe && norm(c.name) === norm(f.classe); })[0];
+    var opts = db.classes.map(function (c) { return '<option value="' + esc(c.id) + '"' + (match && match.id === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('');
+    if (!match) opts = '<option value="__new" selected>+ Nouvelle classe : ' + esc(f.classe || 'Ma classe') + '</option>' + opts;
+    modal('<h2>Fiche reçue</h2><p class="muted">Vérifiez puis ajoutez-la à une classe.</p>' +
+      '<div class="card" style="margin-bottom:14px"><div style="font-weight:750;font-size:18px">' + esc(f.prenom + ' ' + f.nom) + '</div>' +
+      (f.classe ? '<div class="tiny">' + esc(f.classe) + '</div>' : '') +
+      '<div class="muted" style="margin-top:8px">' + f.contacts.map(function (c) { return esc(c.lien) + ' : ' + esc(c.nom) + ' — ' + esc(SOS.phonePretty(c.tel)); }).join('<br>') + '</div>' +
+      (f.medical ? '<div class="badges" style="margin-top:8px"><span class="badge badge-red">⚠ ' + esc(f.medical) + '</span></div>' : '') + '</div>' +
+      '<div class="field"><label for="impCls">Classe</label><select id="impCls">' + opts + '</select></div>' +
+      '<button class="btn btn-primary btn-block btn-lg" id="impGo">Ajouter la fiche</button>',
+      function (m, close) {
+        m.querySelector('#impGo').onclick = function () {
+          var id = m.querySelector('#impCls').value;
+          var cls = getClass(id);
+          if (!cls) { cls = { id: uid(), name: f.classe || 'Ma classe', created: Date.now(), students: [] }; db.classes.push(cls); persist(); }
+          var r = upsertStudent(cls, f);
+          close(); go('/c/' + cls.id);
+          toast(fullName(r.student) + (r.updated ? ' : fiche mise à jour' : ' ajouté(e) ✓'), 'ok');
+        };
+      });
   }
 
   function newClassModal(existing) {
@@ -196,7 +226,7 @@
       '<button class="btn btn-red" id="scanBtn">' + ICON.scan + 'Scanner les fiches</button></div>' +
       '<div class="btn-row" style="margin-bottom:18px">' +
       '<button class="btn btn-ghost" id="manualBtn">' + ICON.plus + 'Saisie manuelle</button>' +
-      '<button class="btn btn-ghost" id="pasteBtn">' + ICON.paste + 'Coller un code</button></div>';
+      '<button class="btn btn-ghost" id="pasteBtn">' + ICON.paste + 'Coller une fiche</button></div>';
 
     if (!cls.students.length) {
       html += '<div class="empty">' + ICON.users + '<h3>Aucune fiche pour l\'instant</h3><p>Appuyez sur <b>Inviter les étudiants</b> et projetez le QR code : chacun remplit sa fiche sur son téléphone. Ensuite, <b>scannez</b> leur QR code.</p></div>';
@@ -265,12 +295,15 @@
     url.search = '?c=' + encodeURIComponent(cls.name);
     url.hash = '';
     var link = url.toString();
-    modal('<h2>Inviter les étudiants</h2><p class="muted">Projetez ou montrez ce QR code. Les étudiants le scannent avec l\'appareil photo de leur téléphone et remplissent leur fiche.</p>' +
+    var invite = 'Merci de remplir votre fiche contact d’urgence pour le cours « ' + cls.name + ' » (1 minute) : ' + link;
+    modal('<h2>Inviter les étudiants</h2><p class="muted">Projetez ou montrez ce QR code : les étudiants le scannent avec l\'appareil photo de leur téléphone. <b>Ceux qui ne savent pas scanner</b> reçoivent le lien par WhatsApp ou SMS.</p>' +
       '<div class="qr-box">' + SOS.qrImg(link, 8) + '</div>' +
       '<div style="text-align:center;font-weight:750;margin:12px 0 2px">' + esc(cls.name) + '</div>' +
       '<p class="tiny" style="text-align:center;word-break:break-all;margin:0 0 14px">' + esc(link) + '</p>' +
-      '<div class="btn-row"><button class="btn btn-ghost" id="copyLink">Copier le lien</button>' +
-      '<a class="btn btn-ghost" href="https://wa.me/?text=' + encodeURIComponent('Merci de remplir votre fiche contact d\'urgence pour le cours (1 minute) : ' + link) + '" target="_blank" rel="noopener">' + I.wa + 'Partager sur WhatsApp</a></div>' +
+      '<div class="btn-row"><a class="btn btn-green" href="https://wa.me/?text=' + encodeURIComponent(invite) + '" target="_blank" rel="noopener">' + I.wa + 'WhatsApp</a>' +
+      '<a class="btn btn-ghost" href="sms:?&body=' + encodeURIComponent(invite) + '">SMS</a>' +
+      '<button class="btn btn-ghost" id="copyLink">Copier le lien</button></div>' +
+      '<p class="tiny" style="margin:10px 2px 0">Étudiant sans smartphone : il remplit sa fiche sur le téléphone d\'un camarade (option « Téléphone d\'une autre personne »), ou utilisez « Formulaires vierges ».</p>' +
       '<div style="height:10px"></div><button class="btn btn-red btn-block btn-lg" id="goScan">' + ICON.scan + 'C\'est fait : scanner les fiches</button>',
       function (m, close) {
         m.querySelector('#copyLink').onclick = function () {
@@ -288,8 +321,8 @@
   }
 
   function pasteModal(cls) {
-    modal('<h2>Coller un code</h2><p class="muted">Si un étudiant vous a envoyé son code (bouton « Copier mon code » sur sa fiche), collez-le ici. Vous pouvez en coller plusieurs d\'un coup.</p>' +
-      '<textarea class="kbd-code" id="codeIn" placeholder="CLASSOS1.…"></textarea><div style="height:12px"></div>' +
+    modal('<h2>Coller une fiche reçue</h2><p class="muted">Collez ici le message ou le lien reçu d’un étudiant (WhatsApp, SMS…). Vous pouvez en coller plusieurs d\'un coup.</p>' +
+      '<textarea class="kbd-code" id="codeIn" placeholder="Collez le message reçu…"></textarea><div style="height:12px"></div>' +
       '<button class="btn btn-primary btn-block btn-lg" id="importCode">Ajouter à la classe</button>',
       function (m, close) {
         m.querySelector('#importCode').onclick = function () {
@@ -412,7 +445,7 @@
 
   function openScanner(cls) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast("Caméra indisponible sur ce navigateur. Utilisez « Coller un code ».", 'err'); return;
+      toast("Caméra indisponible sur ce navigateur. Utilisez « Coller une fiche ».", 'err'); return;
     }
     var el = document.createElement('div');
     el.className = 'scanner';
@@ -459,7 +492,7 @@
       .catch(function (err) {
         closeScanner();
         var denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-        toast(denied ? "Autorisez l'accès à la caméra pour scanner (ou utilisez « Coller un code »)." : "Impossible d'ouvrir la caméra.", 'err');
+        toast(denied ? "Autorisez l'accès à la caméra pour scanner (ou utilisez « Coller une fiche »)." : "Impossible d'ouvrir la caméra.", 'err');
       });
   }
 
@@ -525,7 +558,7 @@
     $('printSheet').innerHTML = '<h1>Contacts d\'urgence — ' + esc(cls.name) + '</h1>' +
       '<div class="p-sub">' + esc(db.settings.school || '') + (db.settings.teacher ? ' · Enseignant(e) : ' + esc(db.settings.teacher) : '') + ' · Édité le ' + new Date().toLocaleDateString('fr-FR') + ' · <b>' + esc(ns) + '</b></div>' +
       '<table><thead><tr><th style="width:24%">Étudiant</th><th style="width:40%">Personnes à prévenir</th><th style="width:8%">Groupe</th><th>Infos médicales</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-      '<div class="p-foot">Document CONFIDENTIEL — à usage exclusif en cas d\'urgence. Ne pas afficher. À détruire en fin d\'année. Généré avec ClasSos.</div>';
+      '<div class="p-foot">Document CONFIDENTIEL — à usage exclusif en cas d\'urgence. Ne pas afficher. À détruire en fin d\'année. ClasSos — ' + SOS.SIGNATURE + '</div>';
     window.print();
   }
 
@@ -564,7 +597,7 @@
 
     html += '<div class="card"><h2>Confidentialité</h2><p class="muted" style="margin:0 0 12px">ClasSos ne possède aucun serveur : aucune fiche n\'est envoyée sur Internet. Les informations servent uniquement à prévenir les proches ou les secours. Supprimez les classes en fin d\'année.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="wipeAll">Effacer toutes les données de ce téléphone</button></div>' +
-      '<p class="tiny" style="text-align:center">ClasSos · version 1.0</p>';
+      '<p class="tiny" style="text-align:center">ClasSos · version 1.1 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
 
     $('setForm').onsubmit = function (e) {

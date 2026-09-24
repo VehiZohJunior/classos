@@ -71,9 +71,36 @@
     return d;
   }
 
-  function phoneValid(tel) {
-    var d = phoneDigits(tel).replace(/\+/g, '');
-    return d.length >= 8 && d.length <= 15;
+  /* Vérification précise : Côte d'Ivoire à 10 chiffres (mobiles 01/05/07, fixes 21/25/27),
+     ou numéro international commençant par + ou 00 */
+  function phoneCheck(tel) {
+    var raw = String(tel || '').trim();
+    if (!raw) return { ok: false, msg: 'Indiquez un numéro.' };
+    if (/[^\d+\s.\-()]/.test(raw)) return { ok: false, msg: 'Le numéro ne doit contenir que des chiffres.' };
+    var d = phoneDigits(raw);
+    var intl = d.indexOf('+') === 0 || d.indexOf('00') === 0;
+    var n = d.replace(/^\+|^00/, '').replace(/\+/g, '');
+    if (intl) {
+      if (n.indexOf('225') === 0) n = n.slice(3);
+      else return n.length >= 8 && n.length <= 15 ? { ok: true } : { ok: false, msg: 'Numéro international incomplet.' };
+    }
+    if (n.length !== 10) return { ok: false, msg: n.length < 10 ? 'Il manque des chiffres : un numéro ivoirien en a 10.' : 'Trop de chiffres : un numéro ivoirien en a 10. Pour l’étranger, commencez par + et l’indicatif.' };
+    if (!/^(01|05|07|21|25|27)/.test(n)) return { ok: false, msg: 'Un numéro ivoirien commence par 01, 05, 07, 21, 25 ou 27.' };
+    return { ok: true };
+  }
+
+  function phoneValid(tel) { return phoneCheck(tel).ok; }
+
+  /* Mise en forme pendant la saisie : 0707123456 -> 07 07 12 34 56 */
+  function phoneFormat(tel) {
+    var raw = String(tel || '');
+    if (/^\s*(\+|00)/.test(raw)) return raw;
+    return raw.replace(/\D/g, '').slice(0, 10).replace(/(\d{2})(?=\d)/g, '$1 ');
+  }
+
+  function samePhone(a, b) {
+    var x = phoneIntl(a), y = phoneIntl(b);
+    return !!x && x === y;
   }
 
   function phonePretty(tel) {
@@ -110,7 +137,8 @@
 
   window.SOS = {
     encodeFiche: encodeFiche, decodeFiche: decodeFiche,
-    phoneIntl: phoneIntl, phoneValid: phoneValid, phonePretty: phonePretty,
+    phoneIntl: phoneIntl, phoneValid: phoneValid, phoneCheck: phoneCheck, phoneFormat: phoneFormat, samePhone: samePhone, phonePretty: phonePretty,
+    SIGNATURE: 'Développée par Vehi Zoh J.',
     telHref: telHref, waHref: waHref, esc: esc, qrImg: qrImg, icons: I, clip: clip
   };
 })();
