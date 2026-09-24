@@ -1,5 +1,5 @@
 /* ClasSos — service worker : l'appli fonctionne sans Internet */
-var CACHE = 'classos-v1';
+var CACHE = 'classos-v2';
 var FILES = [
   './', './index.html', './fiche.html', './style.css', './common.js', './app.js',
   './vendor/qrcode.js', './vendor/jsQR.js', './manifest.webmanifest',
@@ -12,7 +12,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return k.indexOf('classos-') === 0 && k !== CACHE; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 
