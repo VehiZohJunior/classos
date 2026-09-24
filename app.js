@@ -18,6 +18,7 @@
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>',
     userplus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>',
+    id: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2.5"/><path d="M5.5 16.5a3.5 3.5 0 0 1 7 0M15 9h3M15 13h3"/></svg>',
     book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M12 7v6M9 10h6"/></svg>',
     down: '<svg class="acc-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
     paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>'
@@ -30,7 +31,7 @@
   ];
 
   var LIENS = ['Mère', 'Père', 'Tuteur / Tutrice', 'Conjoint(e)', 'Frère / Sœur', 'Oncle / Tante', 'Grand-parent', 'Ami(e)', 'Colocataire', 'Autre'];
-  var SIG = '<p class="tiny" style="text-align:center;margin-top:28px">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';
+  var SIG = '<p class="tiny" style="margin:28px 4px 0;max-width:180px;line-height:1.5">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';
 
   /* ======================= Données ======================= */
   var db = load();
@@ -58,9 +59,21 @@
   function fullName(s) { return s.prenom + ' ' + s.nom; }
 
   /* Ajoute ou met à jour (même nom + prénom = même étudiant) */
-  function upsertStudent(cls, fiche) {
+  function findStudent(cls, fiche) {
     var key = norm(fiche.nom) + '|' + norm(fiche.prenom);
-    var existing = cls.students.filter(function (s) { return norm(s.nom) + '|' + norm(s.prenom) === key; })[0];
+    return cls.students.filter(function (s) { return norm(s.nom) + '|' + norm(s.prenom) === key; })[0];
+  }
+
+  /* Fiche envoyée par un étudiant (scan, lien, collage) : elle ne remplace JAMAIS une fiche existante.
+     Seul l'enseignant peut modifier une fiche (saisie, modification, ou « Remplacer » explicite). */
+  function addFromStudent(cls, fiche) {
+    var existing = findStudent(cls, fiche);
+    if (existing) return { student: existing, skipped: true };
+    return upsertStudent(cls, fiche);
+  }
+
+  function upsertStudent(cls, fiche) {
+    var existing = findStudent(cls, fiche);
     var data = {
       nom: fiche.nom, prenom: fiche.prenom, matricule: fiche.matricule || '',
       sang: fiche.sang || '', medical: fiche.medical || '', contacts: fiche.contacts,
@@ -178,6 +191,7 @@
     if (h[0] === 's' && getStudent(getClass(h[1]), h[2])) return renderSheet(view, getClass(h[1]), getStudent(getClass(h[1]), h[2]));
     if (h[0] === 'urgence') return renderUrgence(view);
     if (h[0] === 'repertoire') return renderRepertoire(view);
+    if (h[0] === 'enseignant') return renderTeacher(view);
     if (h[0] === 'reglages') return renderSettings(view);
     if (h[0] === 'import') return importFiche(view, h.slice(1).join('/'));
     return renderHome(view);
@@ -206,11 +220,19 @@
       html += '<div class="notice warn">' + I.info + '<span style="flex:1"><b>Pensez à faire une sauvegarde.</b> Si ce téléphone est perdu ou réinitialisé, les fiches seront perdues. <a href="#/reglages" style="font-weight:700">Sauvegarder maintenant</a></span></div>';
     }
 
+    /* Les 3 accès principaux, toujours visibles */
+    var st = db.settings;
+    var mainActions =
+      '<button class="btn btn-red btn-block btn-lg" id="createBig">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button>' +
+      '<div class="home-tiles">' +
+      '<button class="tile" id="repBtn"><span class="tile-ic tile-red">' + ICON.book + '</span><b>Répertoire d’urgence étudiant</b><span>' + (total ? total + ' étudiant' + (total > 1 ? 's' : '') : 'Aucune fiche pour l’instant') + '</span></button>' +
+      '<button class="tile" id="teacherBtn"><span class="tile-ic">' + ICON.id + '</span><b>Informations de l’enseignant</b><span>' + (st.teacher ? esc(teacherLabel()) : 'À compléter') + '</span></button>' +
+      '</div>';
+
     if (!db.classes.length) {
-      html += '<div class="empty">' + ICON.users +
-        '<h3>Bienvenue dans ClasSos</h3>' +
-        '<p>Collectez en quelques minutes les contacts à prévenir si un étudiant fait un malaise pendant votre cours — même quand son téléphone est éteint.</p>' +
-        '<button class="btn btn-red btn-lg" id="createBig">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button></div>' +
+      html += '<div class="card" style="text-align:center"><h2 style="font-size:19px">Bienvenue dans ClasSos</h2>' +
+        '<p class="muted" style="margin:6px 0 0">Collectez en quelques minutes les contacts à prévenir si un étudiant fait un malaise pendant votre cours — même quand son téléphone est éteint.</p></div>' +
+        mainActions +
         '<div class="section-title">Comment ça marche</div>' +
         '<div class="card"><ol style="margin:0;padding-left:20px;line-height:1.8" class="muted">' +
         '<li>Appuyez sur <b>Créer contacts étudiants d’urgence</b> et nommez votre classe (ex. « Licence 2 — Groupe A »).</li>' +
@@ -223,9 +245,7 @@
         '<div class="stat"><b>' + db.classes.length + '</b><span>classe' + (db.classes.length > 1 ? 's' : '') + '</span></div>' +
         '<div class="stat"><b>' + total + '</b><span>fiche' + (total > 1 ? 's' : '') + ' enregistrée' + (total > 1 ? 's' : '') + '</span></div>' +
         '<div class="stat"><b>' + withMed + '</b><span>info' + (withMed > 1 ? 's' : '') + ' médicale' + (withMed > 1 ? 's' : '') + '</span></div></div>';
-      html += '<button class="btn btn-red btn-block btn-lg" id="createBig">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button>';
-      html += '<button class="row" id="repBtn" style="margin-top:10px"><div class="class-icon" style="background:var(--red-soft);color:var(--red-dark)">' + ICON.book + '</div>' +
-        '<div class="grow"><div class="title">Répertoire d’urgence étudiant</div><div class="meta">Tous les contacts de vos ' + total + ' étudiant' + (total > 1 ? 's' : '') + '</div></div>' + ICON.chev + '</button>';
+      html += mainActions;
       html += '<div class="section-title">Mes classes</div><div class="list">';
       db.classes.forEach(function (c) {
         html += '<div class="row" data-cls="' + esc(c.id) + '" role="button" tabindex="0"><div class="class-icon">' + esc((c.name[0] || '?').toUpperCase()) + '</div>' +
@@ -245,6 +265,7 @@
     view.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { deleteClass(getClass(b.dataset.del)); }; });
     var cb = $('createBig'); if (cb) cb.onclick = createContactsPickClass;
     var rb = $('repBtn'); if (rb) rb.onclick = function () { go('/repertoire'); };
+    var tb = $('teacherBtn'); if (tb) tb.onclick = function () { go('/enseignant'); };
     var nc = $('newClass'); if (nc) nc.onclick = function () { newClassModal(null); };
     var ib = $('installBtn'); if (ib) ib.onclick = function () { installEvt.prompt(); installEvt = null; };
   }
@@ -269,10 +290,17 @@
         m.querySelector('#impGo').onclick = function () {
           var id = m.querySelector('#impCls').value;
           var cls = getClass(id);
+          if (cls && findStudent(cls, f)) {
+            var who = esc(f.prenom + ' ' + f.nom);
+            confirmModal('Fiche déjà enregistrée', '<b>' + who + '</b> est déjà dans « ' + esc(cls.name) + ' ». Les étudiants ne peuvent pas modifier leur fiche : vous seul décidez. Remplacer l’ancienne fiche par celle-ci ?', 'Remplacer la fiche', function () {
+              upsertStudent(cls, f); go('/c/' + cls.id); toast('Fiche de ' + f.prenom + ' ' + f.nom + ' remplacée', 'ok');
+            });
+            return;
+          }
           if (!cls) { cls = { id: uid(), name: f.classe || 'Ma classe', created: Date.now(), students: [] }; db.classes.push(cls); persist(); }
           var r = upsertStudent(cls, f);
           close(); go('/c/' + cls.id);
-          toast(fullName(r.student) + (r.updated ? ' : fiche mise à jour' : ' ajouté(e) ✓'), 'ok');
+          toast(fullName(r.student) + ' ajouté(e) ✓', 'ok');
         };
       });
   }
@@ -400,15 +428,16 @@
       function (m, close) {
         m.querySelector('#importCode').onclick = function () {
           var parts = m.querySelector('#codeIn').value.split(/\s+/).filter(Boolean);
-          var added = 0, updated = 0, bad = 0;
+          var added = 0, skipped = 0, bad = 0;
           parts.forEach(function (p) {
+            if (p.indexOf('CLASSOS1.') < 0) return;
             var f = SOS.decodeFiche(p);
             if (!f) { bad++; return; }
-            upsertStudent(cls, f).updated ? updated++ : added++;
+            addFromStudent(cls, f).skipped ? skipped++ : added++;
           });
-          if (!added && !updated) { toast('Code non reconnu. Vérifiez qu\'il a été copié en entier.', 'err'); return; }
+          if (!added && !skipped) { toast('Fiche non reconnue. Vérifiez que le message a été copié en entier.', 'err'); return; }
           close(); route();
-          toast(added + ' ajoutée(s)' + (updated ? ', ' + updated + ' mise(s) à jour' : '') + (bad ? ' — ' + bad + ' code(s) invalide(s)' : ''), 'ok');
+          toast((added ? added + ' fiche(s) ajoutée(s)' : 'Aucune nouvelle fiche') + (skipped ? ' — ' + skipped + ' déjà enregistrée(s), non modifiée(s)' : '') + (bad ? ' — ' + bad + ' invalide(s)' : ''), added ? 'ok' : '');
         };
       });
   }
@@ -477,7 +506,7 @@
     html += '<div class="section-title">Numéros d\'urgence</div><div class="services">' +
       ns.map(function (n) { return '<a class="service" href="tel:' + esc(n.num) + '"><b>' + esc(n.num) + '</b><span>' + esc(n.label) + '</span></a>'; }).join('') + '</div>';
 
-    var teacher = db.settings.teacher || '[votre nom]';
+    var teacher = teacherLabel() || '[votre nom]';
     var school = db.settings.school ? ' à ' + db.settings.school : '';
     var c1 = s.contacts[0];
     html += '<div class="section-title">Que dire au téléphone</div><div class="card"><p style="margin:0;font-size:15px;line-height:1.55">« Bonjour, je suis <b>' + esc(teacher) + '</b>, enseignant(e) de <b>' + esc(s.prenom) + '</b>' + esc(school) + '. ' + esc(s.prenom) + ' a eu un malaise pendant le cours. [Décrire son état]. Les secours ont été / vont être appelés. Pouvez-vous venir ou nous rappeler ? »</p>' +
@@ -492,6 +521,45 @@
         cls.students = cls.students.filter(function (x) { return x.id !== s.id; }); persist(); go('/c/' + cls.id); toast('Fiche supprimée');
       });
     };
+  }
+
+  /* ======================= Informations de l'enseignant ======================= */
+  function renderTeacher(view) {
+    setHeader('Informations de l’enseignant', 'Vous seul pouvez les modifier', true);
+    var st = db.settings;
+    var f = function (name, label, val, attrs, hint) {
+      return '<div class="field"><label for="t_' + name + '">' + label + '</label><input id="t_' + name + '" name="' + name + '" value="' + esc(val || '') + '" ' + (attrs || '') + '>' +
+        (hint ? '<div class="hint">' + hint + '</div>' : '') + '<div class="err" id="t_' + name + 'Err"></div></div>';
+    };
+    view.innerHTML = '<form id="teacherForm" class="card" novalidate>' +
+      '<p class="muted">Ces informations apparaissent dans le message à lire au téléphone en cas d’urgence et sur les documents imprimés.</p>' +
+      '<div class="grid-2">' + f('civ', 'Civilité', st.civ, 'maxlength="12" placeholder="M., Mme, Dr…"') + f('teacher', 'Nom et prénom', st.teacher, 'maxlength="60" autocapitalize="words" placeholder="Ex : Kouassi Yao"') + '</div>' +
+      f('subject', 'Matière enseignée', st.subject, 'maxlength="60" placeholder="Ex : Mathématiques"') +
+      f('school', 'Établissement', st.school, 'maxlength="80" placeholder="Ex : Université Félix Houphouët-Boigny"') +
+      f('tphone', 'Votre téléphone', st.tphone, 'type="tel" inputmode="tel" maxlength="22" placeholder="07 07 12 34 56"', 'Facultatif. Utile si un proche doit vous rappeler.') +
+      f('temail', 'Votre e-mail', st.temail, 'type="email" inputmode="email" maxlength="80" placeholder="nom@exemple.com"', 'Facultatif.') +
+      '<button class="btn btn-primary btn-block btn-lg" type="submit">Enregistrer</button></form>' +
+      '<div class="notice">' + I.lock + '<span>Ces informations restent sur votre téléphone, comme les fiches des étudiants.</span></div>';
+    var form = $('teacherForm');
+    var tel = form.elements.tphone;
+    tel.addEventListener('input', function () { if (tel.selectionStart === tel.value.length) tel.value = SOS.phoneFormat(tel.value); });
+    form.onsubmit = function (e) {
+      e.preventDefault();
+      var v = function (n) { return form.elements[n].value.trim(); };
+      var ok = true;
+      var setErr = function (n, msg) { $('t_' + n + 'Err').textContent = msg || ''; form.elements[n].closest('.field').classList.toggle('invalid', !!msg); if (msg) ok = false; };
+      setErr('teacher', v('teacher') ? '' : 'Indiquez votre nom.');
+      setErr('tphone', v('tphone') && !SOS.phoneValid(v('tphone')) ? SOS.phoneCheck(v('tphone')).msg : '');
+      setErr('temail', v('temail') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v('temail')) ? 'Adresse e-mail invalide.' : '');
+      if (!ok) { var first = form.querySelector('.field.invalid input'); if (first) first.focus(); return; }
+      st.civ = v('civ'); st.teacher = v('teacher'); st.subject = v('subject'); st.school = v('school');
+      st.tphone = v('tphone') ? SOS.phonePretty(v('tphone')) : ''; st.temail = v('temail');
+      persist(); go('/'); toast('Informations enregistrées', 'ok');
+    };
+  }
+  function teacherLabel() {
+    var st = db.settings;
+    return st.teacher ? ((st.civ ? st.civ + ' ' : '') + st.teacher) : '';
   }
 
   /* ======================= Répertoire d'urgence étudiant ======================= */
@@ -629,13 +697,14 @@
             lastCode = text; lastAt = now;
             var f = SOS.decodeFiche(text);
             if (!f) { toast("Ce QR code n'est pas une fiche ClasSos", 'err'); return; }
-            var r = upsertStudent(cls, f);
-            if (!r.updated) count++;
+            var r = addFromStudent(cls, f);
+            if (r.skipped) { toast(fullName(r.student) + ' est déjà enregistré(e). Pour modifier sa fiche, ouvrez-la dans la classe.'); return; }
+            count++;
             el.querySelector('#scanCount').textContent = count + ' fiche' + (count > 1 ? 's' : '') + ' scannée' + (count > 1 ? 's' : '') + ' · ' + cls.students.length + ' au total';
             var fr = el.querySelector('#frame'); fr.classList.remove('flash-ok'); void fr.offsetWidth; fr.classList.add('flash-ok');
             if (navigator.vibrate) navigator.vibrate(90);
             beep();
-            toast('✓ ' + fullName(r.student) + (r.updated ? ' (mise à jour)' : ''), 'ok');
+            toast('✓ ' + fullName(r.student), 'ok');
           }, function () { busy = false; });
         }, 180);
       })
@@ -706,7 +775,7 @@
     }).join('');
     var ns = db.settings.numbers.map(function (n) { return n.label + ' : ' + n.num; }).join(' · ');
     $('printSheet').innerHTML = '<h1>Contacts d\'urgence — ' + esc(cls.name) + '</h1>' +
-      '<div class="p-sub">' + esc(db.settings.school || '') + (db.settings.teacher ? ' · Enseignant(e) : ' + esc(db.settings.teacher) : '') + ' · Édité le ' + new Date().toLocaleDateString('fr-FR') + ' · <b>' + esc(ns) + '</b></div>' +
+      '<div class="p-sub">' + esc(db.settings.school || '') + (teacherLabel() ? ' · Enseignant(e) : ' + esc(teacherLabel()) + (db.settings.subject ? ' (' + esc(db.settings.subject) + ')' : '') + (db.settings.tphone ? ' · ' + esc(db.settings.tphone) : '') : '') + ' · Édité le ' + new Date().toLocaleDateString('fr-FR') + ' · <b>' + esc(ns) + '</b></div>' +
       '<table><thead><tr><th style="width:24%">Étudiant</th><th style="width:40%">Personnes à prévenir</th><th style="width:8%">Groupe</th><th>Infos médicales</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="p-foot">Document CONFIDENTIEL — à usage exclusif en cas d\'urgence. Ne pas afficher. À détruire en fin d\'année. ClasSos — ' + SOS.SIGNATURE + '</div>';
     window.print();
@@ -730,10 +799,10 @@
   function renderSettings(view) {
     setHeader('Réglages', 'ClasSos', true);
     var st = db.settings;
-    var html = '<form id="setForm" class="card"><h2>Vous</h2><p class="muted">Utilisé dans le message d\'appel et la fiche papier.</p>' +
-      '<div class="field"><label>Votre nom</label><input name="teacher" maxlength="60" value="' + esc(st.teacher || '') + '" placeholder="Ex : M. Kouassi"></div>' +
-      '<div class="field"><label>Établissement</label><input name="school" maxlength="80" value="' + esc(st.school || '') + '" placeholder="Ex : Université Félix Houphouët-Boigny"></div>' +
-      '<h2 style="margin-top:8px">Numéros d\'urgence</h2><p class="muted">Par défaut : Côte d\'Ivoire. Ajoutez l\'infirmerie de l\'établissement si elle existe.</p>' +
+    var html = '<button class="row" id="goTeacher" style="margin-bottom:14px"><div class="class-icon" style="background:var(--surface-2);color:var(--navy)">' + ICON.id + '</div>' +
+      '<div class="grow"><div class="title">Informations de l’enseignant</div><div class="meta">' + (st.teacher ? esc(teacherLabel()) : 'À compléter') + '</div></div>' + ICON.chev + '</button>' +
+      '<form id="setForm" class="card">' +
+      '<h2>Numéros d\'urgence</h2><p class="muted">Par défaut : Côte d\'Ivoire. Ajoutez l\'infirmerie de l\'établissement si elle existe.</p>' +
       st.numbers.concat([{ label: '', num: '' }]).slice(0, 4).map(function (n, i) {
         return '<div class="grid-2"><div class="field"><label>Service ' + (i + 1) + '</label><input name="nl' + i + '" maxlength="24" value="' + esc(n.label) + '" placeholder="' + (i === 3 ? 'Ex : Infirmerie' : '') + '"></div>' +
           '<div class="field"><label>Numéro</label><input name="nn' + i + '" type="tel" maxlength="20" value="' + esc(n.num) + '"></div></div>';
@@ -747,22 +816,21 @@
 
     html += '<div class="card"><h2>Confidentialité</h2><p class="muted" style="margin:0 0 12px">ClasSos ne possède aucun serveur : aucune fiche n\'est envoyée sur Internet. Les informations servent uniquement à prévenir les proches ou les secours. Supprimez les classes en fin d\'année.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="wipeAll">Effacer toutes les données de ce téléphone</button></div>' +
-      '<p class="tiny" style="text-align:center">ClasSos · version 1.3 · <b>' + SOS.SIGNATURE + '</b></p>';
+      '<p class="tiny" style="text-align:center">ClasSos · version 1.4 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
 
     $('setForm').onsubmit = function (e) {
       e.preventDefault();
       var f = e.target;
-      st.teacher = f.elements.teacher.value.trim();
-      st.school = f.elements.school.value.trim();
       var nums = [];
       for (var i = 0; i < 4; i++) {
         var l = f.elements['nl' + i].value.trim(), n = f.elements['nn' + i].value.replace(/[^\d+]/g, '');
         if (l && n) nums.push({ label: l, num: n });
       }
       st.numbers = nums.length ? nums : DEFAULT_NUMBERS.slice();
-      persist(); toast('Réglages enregistrés', 'ok'); route();
+      persist(); toast('Numéros d’urgence enregistrés', 'ok'); route();
     };
+    $('goTeacher').onclick = function () { go('/enseignant'); };
     $('backupBtn').onclick = backupModal;
     $('restoreBtn').onclick = function () { $('restoreFile').click(); };
     $('restoreFile').onchange = function (e) { var file = e.target.files[0]; if (file) restoreModal(file); e.target.value = ''; };
