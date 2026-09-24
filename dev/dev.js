@@ -49,11 +49,16 @@
 
   function renderLogin() {
     $('logoutBtn').hidden = true;
-    $('view').innerHTML = '<div class="card" style="max-width:440px;margin:30px auto"><h2>Accès développeur</h2><p class="muted">' + (sharedTried ? 'Le compte ClasSos de ce téléphone n’a pas (encore) l’accès développeur.' : 'Réservé au compte développeur de ClasSos.') + '</p>' +
-      '<form id="lf" novalidate><div class="field"><label for="le">E-mail</label><input id="le" type="email" autocomplete="username"></div>' +
+    $('view').innerHTML = '<div class="card" style="max-width:460px;margin:30px auto"><h2>Accès développeur</h2>' +
+      (sharedTried
+        ? '<p class="muted">Votre compte ClasSos est bien sur cet appareil, mais l’accès développeur n’est <b>pas encore activé</b>. Envoyez votre nom au développeur de l’appli pour l’activer, puis rouvrez cette page.</p>'
+        : '<p class="muted">Aucun mot de passe n’est nécessaire.</p><ol class="muted" style="padding-left:20px;line-height:1.8;margin:0 0 14px"><li>Ouvrez la <a href="../admin/" style="font-weight:700">console administrateur</a> sur cet appareil.</li><li>Tapez votre nom et touchez « Commencer ».</li><li>Faites activer l’accès développeur, puis revenez sur cette page.</li></ol>' +
+          '<a class="btn btn-primary btn-block btn-lg" href="../admin/">Ouvrir la console administrateur</a>') +
+      '<details class="qr-more" style="margin-top:16px"><summary>Connexion avec e-mail et mot de passe</summary>' +
+      '<form id="lf" novalidate style="margin-top:10px"><div class="field"><label for="le">E-mail</label><input id="le" type="email" autocomplete="username"></div>' +
       '<div class="field"><label for="lp">Mot de passe</label><input id="lp" type="password" autocomplete="current-password"></div>' +
       '<div id="lerr" style="color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
-      '<button class="btn btn-primary btn-block btn-lg" type="submit">Se connecter</button></form></div>' +
+      '<button class="btn btn-ghost btn-block" type="submit">Se connecter</button></form></details></div>' +
       '<p class="tiny" style="text-align:center">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';
     $('lf').onsubmit = function (e) {
       e.preventDefault();
