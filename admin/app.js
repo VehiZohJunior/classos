@@ -203,12 +203,9 @@
   function renderLogin(view) {
     setHeader('ClasSos', 'Console administrateur', false);
     var signup = loginMode === 'signup';
-    view.innerHTML = '<div class="card" style="text-align:center"><h2 style="font-size:19px">' + (signup ? 'Créer mon compte enseignant' : 'Connexion enseignant') + '</h2>' +
-      '<p class="muted" style="margin:6px 0 0">Votre espace personnel : vos classes et le répertoire d’urgence de vos étudiants. Personne d’autre n’y a accès.</p></div>' +
+    view.innerHTML = '<h2 style="font-size:20px;text-align:center;margin:6px 0 14px">' + (signup ? 'Créer mon compte enseignant' : 'Connexion enseignant') + '</h2>' +
       '<form id="authForm" class="card" novalidate>' +
-      (signup ? '<div class="grid-2"><div class="field"><label for="a_civ">Civilité</label><input id="a_civ" name="civ" maxlength="12" placeholder="M., Mme, Dr…"></div>' +
-        '<div class="field"><label for="a_name">Nom et prénom</label><input id="a_name" name="name" maxlength="60" autocomplete="name" autocapitalize="words"><div class="err">Indiquez votre nom.</div></div></div>' +
-        '<div class="field"><label for="a_school">Établissement <span class="opt">(facultatif)</span></label><input id="a_school" name="school" maxlength="80"></div>' : '') +
+      (signup ? '<div class="field"><label for="a_name">Nom et prénom</label><input id="a_name" name="name" maxlength="60" autocomplete="name" autocapitalize="words"><div class="err">Indiquez votre nom.</div></div>' : '') +
       '<div class="field"><label for="a_email">E-mail</label><input id="a_email" name="email" type="email" inputmode="email" autocomplete="username" maxlength="120"><div class="err">Adresse e-mail invalide.</div></div>' +
       '<div class="field"><label for="a_pass">Mot de passe</label><input id="a_pass" name="password" type="password" autocomplete="' + (signup ? 'new-password' : 'current-password') + '" maxlength="200">' +
       (signup ? '<div class="hint">8 caractères minimum.</div>' : '') + '<div class="err">' + (signup ? '8 caractères minimum.' : 'Indiquez votre mot de passe.') + '</div></div>' +
@@ -226,7 +223,7 @@
       if (signup) ok = ok & bad('name', !v('name'));
       if (!ok) return;
       var btn = f.querySelector('button[type=submit]'); busy(btn, true); $('authErr').textContent = '';
-      var body = signup ? { email: v('email'), password: f.elements.password.value, name: v('name'), civ: v('civ'), school: v('school') } : { email: v('email'), password: f.elements.password.value };
+      var body = signup ? { email: v('email'), password: f.elements.password.value, name: v('name') } : { email: v('email'), password: f.elements.password.value };
       api('POST', signup ? '/auth/signup' : '/auth/login', body).then(function (r) {
         session = { token: r.token, teacher: r.teacher }; writeJSON(SESSION_KEY, session);
         db = readJSON(cacheKey()) || { teacher: r.teacher, classes: [], syncedAt: 0 };
@@ -263,21 +260,17 @@
       '</div>';
 
     if (!classes().length) {
-      html += '<div class="section-title">Comment ça marche</div><div class="card"><ol style="margin:0;padding-left:20px;line-height:1.8" class="muted">' +
-        '<li>Touchez <b>Créer contacts étudiants d’urgence</b> et nommez la classe.</li>' +
-        '<li>Envoyez <b>le lien d’inscription</b> au délégué : il le partage dans le groupe de la classe.</li>' +
-        '<li>Chaque étudiant s’inscrit <b>sur son propre téléphone</b>. Le répertoire se remplit ici automatiquement.</li>' +
-        '<li>En cas de malaise : bouton rouge <b>URGENCE</b> → nom → <b>Appeler</b>, même sans Internet.</li></ol></div>';
+      html += '<div class="card" style="margin-top:14px"><ol style="margin:0;padding-left:20px;line-height:1.9" class="muted">' +
+        '<li>Touchez le bouton rouge et nommez la classe.</li>' +
+        '<li>Envoyez le lien au délégué.</li>' +
+        '<li>Les étudiants s’inscrivent : le répertoire se remplit tout seul.</li></ol></div>';
     } else {
       html += '<div class="section-title" style="display:flex;align-items:center;justify-content:space-between">Mes classes<button class="icon-act" id="refreshBtn" aria-label="Actualiser" title="Actualiser">' + ICON.refresh + '</button></div><div class="list">';
       classes().forEach(function (c) {
         var paused = c.status === 'paused';
         html += '<div class="row" data-cls="' + esc(c.id) + '" role="button" tabindex="0"><div class="class-icon"' + (paused ? ' style="background:var(--ink-3)"' : '') + '>' + esc((c.name[0] || '?').toUpperCase()) + '</div>' +
           '<div class="grow"><div class="title">' + esc(c.name) + '</div><div class="meta">' + c.students.length + ' inscrit' + (c.students.length > 1 ? 's' : '') + '</div>' +
-          '<div class="badges">' + (paused ? '<span class="badge badge-amber">En pause</span>' : '<span class="badge badge-green">Inscriptions ouvertes</span>') + '</div></div>' +
-          '<button class="icon-act" type="button" data-edit="' + esc(c.id) + '" aria-label="Modifier la classe">' + ICON.edit + '</button>' +
-          '<button class="icon-act" type="button" data-pause="' + esc(c.id) + '" aria-label="' + (paused ? 'Reprendre les inscriptions' : 'Mettre en pause') + '">' + (paused ? ICON.play : ICON.pause) + '</button>' +
-          '<button class="icon-act danger" type="button" data-del="' + esc(c.id) + '" aria-label="Supprimer la classe">' + ICON.trash + '</button></div>';
+          (paused ? '<div class="badges"><span class="badge badge-amber">En pause</span></div>' : '') + '</div>' + ICON.chev + '</div>';
       });
       html += '</div>';
     }
@@ -287,9 +280,6 @@
       var open = function (e) { if (e.target.closest('.icon-act')) return; go('/c/' + b.dataset.cls); };
       b.onclick = open; b.onkeydown = function (e) { if (e.key === 'Enter') open(e); };
     });
-    view.querySelectorAll('[data-edit]').forEach(function (b) { b.onclick = function () { classModal(getClass(b.dataset.edit)); }; });
-    view.querySelectorAll('[data-pause]').forEach(function (b) { b.onclick = function () { togglePause(getClass(b.dataset.pause)); }; });
-    view.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { deleteClass(getClass(b.dataset.del)); }; });
     $('createBig').onclick = function () { classModal(null); };
     $('repBtn').onclick = function () { go('/repertoire'); };
     $('teacherBtn').onclick = function () { go('/enseignant'); };
@@ -348,14 +338,15 @@
   function shareModal(cls, fresh) {
     var link = joinLink(cls);
     var msg = 'Bonjour, voici le lien ClasSos pour « ' + cls.name + ' ». Chaque étudiant l’ouvre sur SON téléphone et remplit sa fiche contact d’urgence (1 minute). Merci de le partager dans le groupe de la classe : ' + link;
-    modal('<h2>' + (fresh ? 'Classe créée ✓' : 'Lien d’inscription') + '</h2>' +
-      '<p class="muted">Envoyez <b>ce lien unique</b> au délégué de « ' + esc(cls.name) + ' ». Il le partage dans le groupe de la classe : chaque étudiant s’inscrit sur son téléphone et le répertoire se remplit ici tout seul.</p>' +
-      (cls.status === 'paused' ? '<div class="notice warn">' + I.info + '<span>La classe est <b>en pause</b> : le lien refusera les inscriptions tant que vous ne la reprenez pas.</span></div>' : '') +
-      '<div class="btn-row" style="margin-bottom:10px"><a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(msg) + '">' + I.wa + 'Envoyer par WhatsApp</a>' +
-      '<a class="btn btn-ghost" href="sms:?&body=' + encodeURIComponent(msg) + '">SMS</a></div>' +
-      '<div class="url-box"><code id="joinUrl">' + esc(link) + '</code><button class="btn btn-ghost" id="copyLink" type="button">Copier</button></div>' +
-      '<details class="qr-more"><summary>Afficher le QR code (à projeter en amphi)</summary><div class="qr-box" style="margin-top:12px">' + SOS.qrImg(link, 7) + '</div></details>' +
-      '<button class="btn btn-ghost btn-block" id="newLink" type="button" style="margin-top:12px">' + ICON.link + 'Générer un nouveau lien (l’ancien ne marchera plus)</button>',
+    modal('<h2>' + (fresh ? 'Classe créée ✓' : 'Envoyer le lien') + '</h2>' +
+      '<p class="muted">Envoyez ce lien au délégué de « ' + esc(cls.name) + ' ».</p>' +
+      (cls.status === 'paused' ? '<div class="notice warn">' + I.info + '<span>Classe <b>en pause</b> : reprenez-la pour que le lien fonctionne.</span></div>' : '') +
+      '<a class="btn btn-green btn-block btn-lg" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(msg) + '">' + I.wa + 'Envoyer par WhatsApp</a>' +
+      '<div class="url-box" style="margin-top:10px"><code id="joinUrl">' + esc(link) + '</code><button class="btn btn-ghost" id="copyLink" type="button">Copier</button></div>' +
+      '<details class="qr-more"><summary>Autres options</summary>' +
+      '<a class="btn btn-ghost btn-block" style="margin-top:10px" href="sms:?&body=' + encodeURIComponent(msg) + '">Envoyer par SMS</a>' +
+      '<div class="qr-box" style="margin-top:10px">' + SOS.qrImg(link, 7) + '</div>' +
+      '<button class="btn btn-ghost btn-block" id="newLink" type="button" style="margin-top:10px">' + ICON.link + 'Nouveau lien (l’ancien ne marchera plus)</button></details>',
       function (m, close) {
         m.querySelector('#copyLink').onclick = function () { copyText(link).then(function () { toast('Lien copié', 'ok'); }); };
         m.querySelector('#newLink').onclick = function () {
@@ -381,12 +372,10 @@
     } else {
       html += '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Rechercher un étudiant…" autocomplete="off"></div><div class="list" id="list"></div>';
     }
-    html += '<div class="divider"></div><div class="btn-row">' +
-      '<button class="btn btn-ghost" id="manualBtn">' + ICON.plus + 'Ajouter un étudiant sans téléphone</button></div>' +
-      '<div class="btn-row" style="margin-top:10px">' +
-      '<button class="btn btn-ghost" id="printBtn"' + (cls.students.length ? '' : ' disabled') + '>' + ICON.print + 'Liste papier</button>' +
-      '<button class="btn btn-ghost" id="blankBtn">' + ICON.print + 'Formulaires vierges</button></div>' +
-      '<p class="tiny" style="margin-top:10px">« Liste papier » : les contacts de la classe à garder dans la salle. « Formulaires vierges » : pour un étudiant sans téléphone, que vous saisissez ensuite avec « Ajouter un étudiant sans téléphone ».</p>';
+    html += '<details class="qr-more more-opts"><summary>Plus d’options</summary>' +
+      '<button class="btn btn-ghost btn-block" id="manualBtn">' + ICON.plus + 'Ajouter un étudiant sans téléphone</button>' +
+      '<button class="btn btn-ghost btn-block" id="printBtn"' + (cls.students.length ? '' : ' disabled') + '>' + ICON.print + 'Imprimer la liste des contacts</button>' +
+      '<button class="btn btn-ghost btn-block" id="blankBtn">' + ICON.print + 'Imprimer des fiches papier vierges</button></details>';
     view.innerHTML = html;
     if (cls.students.length) {
       var draw = function () { $('list').innerHTML = studentRows(cls, filterStudents(cls.students, $('q').value)); bindRows($('list')); };

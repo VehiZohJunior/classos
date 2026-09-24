@@ -398,3 +398,6 @@ main { max-width: 760px; margin: 0 auto; padding: 16px 16px 120px; }
 .qr-more { margin-top: 12px; }
 .qr-more summary { cursor: pointer; font-weight: 650; font-size: 14.5px; color: var(--navy); padding: 6px 2px; }
 .badges .badge-green { background: var(--green-soft); color: var(--green); }
+
+.more-opts { margin-top: 20px; }
+.more-opts .btn { margin-top: 10px; }
