@@ -199,9 +199,10 @@
   $('fab').onclick = function () { go('/urgence'); };
 
   /* ======================= Connexion / création de compte ======================= */
-  var loginMode = 'login';
+  var loginMode = 'start';
   function renderLogin(view) {
     setHeader('ClasSos', 'Console administrateur', false);
+    if (loginMode === 'start') return renderStart(view);
     var signup = loginMode === 'signup';
     view.innerHTML = '<h2 style="font-size:20px;text-align:center;margin:6px 0 14px">' + (signup ? 'Créer mon compte enseignant' : 'Connexion enseignant') + '</h2>' +
       '<form id="authForm" class="card" novalidate>' +
@@ -211,9 +212,8 @@
       (signup ? '<div class="hint">8 caractères minimum.</div>' : '') + '<div class="err">' + (signup ? '8 caractères minimum.' : 'Indiquez votre mot de passe.') + '</div></div>' +
       '<div class="err" id="authErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
       '<button class="btn btn-primary btn-block btn-lg" type="submit">' + (signup ? 'Créer mon compte' : 'Se connecter') + '</button></form>' +
-      '<p style="text-align:center"><button class="btn btn-ghost" id="switchMode" type="button">' + (signup ? 'J’ai déjà un compte : me connecter' : 'Nouveau ? Créer mon compte enseignant') + '</button></p>' +
-      '<p class="tiny" style="text-align:center;margin-top:18px">Vous êtes étudiant ? Utilisez le lien d’inscription envoyé par votre délégué.</p>' + SIG;
-    $('switchMode').onclick = function () { loginMode = signup ? 'login' : 'signup'; route(); };
+      '<p style="text-align:center"><button class="btn btn-ghost" id="switchMode" type="button">Retour</button></p>' + SIG;
+    $('switchMode').onclick = function () { loginMode = 'start'; route(); };
     var f = $('authForm');
     f.onsubmit = function (e) {
       e.preventDefault();
@@ -230,6 +230,32 @@
         go('/'); route(); sync(true);
         toast(signup ? 'Compte créé. Bienvenue !' : 'Connecté(e)', 'ok');
       }, function (err) { busy(btn, false); $('authErr').textContent = err.message; });
+    };
+  }
+
+  /* Démarrage sans mot de passe : juste le nom, le compte est lié à ce téléphone */
+  function renderStart(view) {
+    view.innerHTML = '<h2 style="font-size:20px;text-align:center;margin:6px 0 14px">Bienvenue sur ClasSos</h2>' +
+      '<form id="startForm" class="card" novalidate>' +
+      '<div class="field"><label for="s_name">Votre nom</label><input id="s_name" maxlength="60" autocomplete="name" autocapitalize="words" placeholder="Ex : M. Kouassi Yao"><div class="err">Indiquez votre nom.</div></div>' +
+      '<div class="err" id="startErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
+      '<button class="btn btn-red btn-block btn-lg" type="submit">Commencer</button></form>' +
+      '<p class="tiny" style="text-align:center">Votre compte est enregistré sur ce téléphone : utilisez toujours le même téléphone.</p>' +
+      '<details class="qr-more" style="text-align:center"><summary>J’ai un compte avec e-mail et mot de passe</summary><button class="btn btn-ghost" id="toLogin" type="button" style="margin-top:10px">Se connecter</button></details>' + SIG;
+    $('toLogin').onclick = function () { loginMode = 'login'; route(); };
+    var inp = $('s_name');
+    $('startForm').onsubmit = function (e) {
+      e.preventDefault();
+      var name = inp.value.trim();
+      inp.closest('.field').classList.toggle('invalid', !name);
+      if (!name) return;
+      var btn = $('startForm').querySelector('button[type=submit]'); busy(btn, true); $('startErr').textContent = '';
+      api('POST', '/auth/start', { name: name }).then(function (r) {
+        session = { token: r.token, teacher: r.teacher }; writeJSON(SESSION_KEY, session);
+        db = { teacher: r.teacher, classes: [], syncedAt: 0 };
+        go('/'); route(); sync(true);
+        toast('Bienvenue ' + name + ' !', 'ok');
+      }, function (err) { busy(btn, false); $('startErr').textContent = err.message; });
     };
   }
 
@@ -582,7 +608,7 @@
       f('subject', 'Matière enseignée', t.subject, 'maxlength="60" placeholder="Ex : Mathématiques"') +
       f('school', 'Établissement', t.school, 'maxlength="80" placeholder="Ex : Université Félix Houphouët-Boigny"') +
       f('phone', 'Votre téléphone', t.phone, 'type="tel" inputmode="tel" maxlength="22" placeholder="07 07 12 34 56"', 'Facultatif.') +
-      '<div class="field"><label>E-mail du compte</label><input value="' + esc(t.email || '') + '" disabled></div>' +
+      (t.email ? '<div class="field"><label>E-mail du compte</label><input value="' + esc(t.email) + '" disabled></div>' : '') +
       '<button class="btn btn-primary btn-block btn-lg" type="submit">Enregistrer</button></form>';
     var form = $('teacherForm');
     var tel = form.elements.phone;
@@ -618,12 +644,13 @@
         return '<div class="grid-2"><div class="field"><label>Service ' + (i + 1) + '</label><input name="nl' + i + '" maxlength="24" value="' + esc(n.label) + '"' + (i === 3 ? ' placeholder="Ex : Infirmerie"' : '') + '></div>' +
           '<div class="field"><label>Numéro</label><input name="nn' + i + '" type="tel" maxlength="20" value="' + esc(n.num) + '"></div></div>';
       }).join('') + '<button class="btn btn-primary btn-block" type="submit">Enregistrer</button></form>';
-    html += '<form id="pwForm" class="card" novalidate><h2>Mot de passe</h2>' +
+    if (!t.device) html += '<form id="pwForm" class="card" novalidate><h2>Mot de passe</h2>' +
       '<div class="field"><label for="pw1">Mot de passe actuel</label><input id="pw1" type="password" autocomplete="current-password"></div>' +
       '<div class="field"><label for="pw2">Nouveau mot de passe</label><input id="pw2" type="password" autocomplete="new-password"><div class="hint">8 caractères minimum.</div></div>' +
       '<button class="btn btn-ghost btn-block" type="submit">Changer le mot de passe</button></form>';
-    html += '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0 0 12px">Connecté(e) : <b>' + esc(t.email || '') + '</b>. Vos fiches sont protégées sur le serveur ClasSos et une copie reste sur ce téléphone pour fonctionner sans Internet.</p>' +
-      '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter de ce téléphone</button></div>' +
+    html += (t.device ? '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0">Votre compte est lié à <b>ce téléphone</b>. N’effacez pas les données du navigateur et utilisez toujours ce téléphone pour ouvrir ClasSos.</p></div>' :
+      '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0 0 12px">Connecté(e) : <b>' + esc(t.email || '') + '</b>.</p>' +
+      '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter de ce téléphone</button></div>') +
       '<p class="tiny" style="text-align:center">ClasSos · version 2.0 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
     $('goTeacher').onclick = function () { go('/enseignant'); };
@@ -635,13 +662,13 @@
       api('PUT', '/teacher', { civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers: nums.length ? nums : DEFAULT_NUMBERS })
         .then(function () { sync(true); toast('Numéros d’urgence enregistrés', 'ok'); }, function (err) { toast(err.message, 'err'); });
     };
-    $('pwForm').onsubmit = function (e) {
+    if ($('pwForm')) $('pwForm').onsubmit = function (e) {
       e.preventDefault();
       if ($('pw2').value.length < 8) { toast('Le nouveau mot de passe doit contenir au moins 8 caractères.', 'err'); return; }
       if (!needOnline()) return;
       api('POST', '/auth/password', { current: $('pw1').value, next: $('pw2').value }).then(function () { $('pw1').value = ''; $('pw2').value = ''; toast('Mot de passe changé', 'ok'); }, function (err) { toast(err.message, 'err'); });
     };
-    $('logoutBtn').onclick = function () {
+    if ($('logoutBtn')) $('logoutBtn').onclick = function () {
       confirmModal('Se déconnecter ?', 'La copie du répertoire sera effacée de ce téléphone. Vos fiches restent dans votre compte.', 'Se déconnecter', function () { logout(false); });
     };
     var il = $('importLegacy');

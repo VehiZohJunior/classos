@@ -8,7 +8,13 @@
   var esc = SOS.esc;
   var session = null;
   try { session = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
-  var data = null, q = '';
+  var data = null, q = '', sharedTried = false;
+  /* Compte ClasSos sans mot de passe de ce téléphone : utilisé s'il a l'accès développeur */
+  function sharedSession() {
+    try { var a = JSON.parse(localStorage.getItem('classos.admin.session')); if (a && a.token) return { token: a.token, email: (a.teacher && a.teacher.name) || 'compte de ce téléphone', shared: true }; } catch (e) {}
+    return null;
+  }
+  if (!session) { session = sharedSession(); sharedTried = !!session; }
 
   function api(method, path, body) {
     var h = { 'Content-Type': 'application/json' };
@@ -22,7 +28,7 @@
     }, function () { throw { message: 'Serveur injoignable. Vérifiez la connexion.' }; });
   }
   function logout() {
-    if (session) fetch(API + '/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + session.token } }).catch(function () {});
+    if (session && !session.shared) fetch(API + '/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + session.token } }).catch(function () {});
     session = null; data = null;
     try { localStorage.removeItem(KEY); } catch (e) {}
     render();
@@ -43,7 +49,7 @@
 
   function renderLogin() {
     $('logoutBtn').hidden = true;
-    $('view').innerHTML = '<div class="card" style="max-width:440px;margin:30px auto"><h2>Accès développeur</h2><p class="muted">Réservé au compte développeur de ClasSos.</p>' +
+    $('view').innerHTML = '<div class="card" style="max-width:440px;margin:30px auto"><h2>Accès développeur</h2><p class="muted">' + (sharedTried ? 'Le compte ClasSos de ce téléphone n’a pas (encore) l’accès développeur.' : 'Réservé au compte développeur de ClasSos.') + '</p>' +
       '<form id="lf" novalidate><div class="field"><label for="le">E-mail</label><input id="le" type="email" autocomplete="username"></div>' +
       '<div class="field"><label for="lp">Mot de passe</label><input id="lp" type="password" autocomplete="current-password"></div>' +
       '<div id="lerr" style="color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
@@ -86,7 +92,7 @@
       '<div class="tbl-wrap"><table class="dev"><thead><tr><th>Enseignant</th><th>Établissement</th><th style="text-align:right">Classes</th><th style="text-align:right">Fiches</th><th>Créé</th><th>Dernière connexion</th><th>Statut</th><th>Actions</th></tr></thead><tbody>' +
       (list.length ? list.map(function (x) {
         var isDev = x.role === 'dev';
-        return '<tr><td><b>' + esc(((x.civ ? x.civ + ' ' : '') + x.name).trim()) + '</b><div class="tiny">' + esc(x.email) + '</div></td><td>' + esc(x.school || '—') + '</td>' +
+        return '<tr><td><b>' + esc(((x.civ ? x.civ + ' ' : '') + x.name).trim()) + '</b><div class="tiny">' + (/@appareil.classos$/.test(x.email) ? 'Compte sans mot de passe (lié au téléphone)' : esc(x.email)) + '</div></td><td>' + esc(x.school || '—') + '</td>' +
           '<td class="num">' + x.classes + '</td><td class="num">' + x.students + '</td><td>' + d(x.created_at) + '</td><td>' + d(x.last_login) + '</td>' +
           '<td>' + (isDev ? '<span class="st st-dev">Développeur</span>' : '<span class="st st-' + x.status + '">' + (x.status === 'active' ? 'Actif' : 'Suspendu') + '</span>') + '</td>' +
           '<td>' + (isDev ? '' : '<div class="acts"><button class="btn btn-ghost" data-toggle="' + esc(x.id) + '">' + (x.status === 'active' ? 'Suspendre' : 'Réactiver') + '</button>' +

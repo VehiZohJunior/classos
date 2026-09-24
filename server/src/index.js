@@ -88,11 +88,15 @@ async function limit(env, key, max, windowMs) {
 }
 
 /* ======================= Sessions ======================= */
-async function createSession(env, teacherId) {
+const DEVICE_DOMAIN = '@appareil.classos';
+const isDevice = (t) => String(t.email || '').endsWith(DEVICE_DOMAIN);
+const DEVICE_SESSION_DAYS = 3650; // compte sans mot de passe : le téléphone est la clé
+
+async function createSession(env, teacherId, days) {
   const token = randomToken(32);
   const t = now();
   await env.DB.prepare('INSERT INTO sessions (token_hash, teacher_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-    .bind(await sha256(token), teacherId, t, t + SESSION_DAYS * 86400000).run();
+    .bind(await sha256(token), teacherId, t, t + (days || SESSION_DAYS) * 86400000).run();
   await env.DB.prepare('UPDATE teachers SET last_login = ? WHERE id = ?').bind(t, teacherId).run();
   return token;
 }
@@ -105,12 +109,18 @@ async function auth(env, req, role) {
   if (!s || s.expires_at < now()) fail(401, 'Session expirée. Reconnectez-vous.');
   if (s.status !== 'active') fail(403, 'Ce compte est suspendu. Contactez le support ClasSos.');
   if (role === 'dev' && s.role !== 'dev') fail(403, 'Accès réservé au développeur.');
+  /* Session glissante : prolongée tant que le compte est utilisé */
+  const days = isDevice(s) ? DEVICE_SESSION_DAYS : SESSION_DAYS;
+  if (s.expires_at - now() < (days / 2) * 86400000) {
+    await env.DB.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').bind(now() + days * 86400000, await sha256(token)).run();
+  }
   return s;
 }
 function teacherPublic(t) {
   let numbers = [];
   try { numbers = JSON.parse(t.numbers || '[]'); } catch (e) {}
-  return { id: t.id, email: t.email, role: t.role, civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers };
+  const device = isDevice(t);
+  return { id: t.id, email: device ? '' : t.email, device, role: t.role, civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers };
 }
 function studentOut(s) {
   let contacts = [];
@@ -189,6 +199,18 @@ async function handle(req, env) {
 
   /* ---------- Authentification enseignant / développeur ---------- */
   if (r[0] === 'auth') {
+    /* Démarrage sans mot de passe : le compte est lié au téléphone (jeton de session longue durée) */
+    if (r[1] === 'start' && m === 'POST') {
+      await limit(env, 'start:' + ip, 10, 3600000);
+      const b = await body();
+      const name = clip(b.name, 60);
+      if (!name) fail(400, 'Indiquez votre nom.');
+      const id = uid();
+      await env.DB.prepare('INSERT INTO teachers (id, email, pass_hash, pass_salt, name, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(id, 'compte-' + id.toLowerCase() + DEVICE_DOMAIN, randomToken(32), randomToken(16), name, now()).run();
+      const t = await env.DB.prepare('SELECT * FROM teachers WHERE id = ?').bind(id).first();
+      return { token: await createSession(env, id, DEVICE_SESSION_DAYS), teacher: teacherPublic(t) };
+    }
     if (r[1] === 'signup' && m === 'POST') {
       await limit(env, 'signup:' + ip, 8, 3600000);
       const b = await body();

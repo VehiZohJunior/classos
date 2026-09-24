@@ -59,6 +59,14 @@ r = await call('DELETE', '/classes/' + cls.id, null, HA); ok(r.status === 200, '
 r = await call('GET', '/directory', null, HA); ok(r.body.classes.length === 1 && r.body.classes[0].name === 'Ancienne classe', 'classe supprimée avec ses fiches');
 r = await call('POST', '/auth/logout', null, HB); r = await call('GET', '/directory', null, HB); ok(r.status === 401, 'déconnexion invalide la session');
 
+// Démarrage sans mot de passe (compte lié au téléphone)
+r = await call('POST', '/auth/start', { name: '' }); ok(r.status === 400, 'start sans nom refusé');
+r = await call('POST', '/auth/start', { name: 'Prof Sans MDP' }); ok(r.status === 200 && r.body.token && r.body.teacher.device === true && r.body.teacher.email === '', 'start sans mot de passe');
+const HS = { Authorization: 'Bearer ' + r.body.token };
+r = await call('POST', '/classes', { name: 'Classe sans MDP' }, HS); ok(r.status === 200, 'compte sans mot de passe crée une classe');
+r = await call('GET', '/directory', null, HS); ok(r.body.classes.length === 1, 'compte sans mot de passe isolé');
+r = await call('GET', '/directory', null, HA); ok(!r.body.classes.some(function (c) { return c.name === 'Classe sans MDP'; }), 'A ne voit pas la classe du compte sans mot de passe');
+r = await call('POST', '/auth/login', { email: 'compte-x@appareil.classos', password: '' }); ok(r.status === 401, 'impossible de se connecter par e-mail à un compte sans mot de passe');
 console.log(JSON.stringify({ devCandidate: A.email, tokenA: tA }));
 console.log(pass + ' réussis, ' + failN + ' échoué(s)');
 process.exit(failN ? 1 : 0);
