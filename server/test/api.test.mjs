@@ -3,7 +3,7 @@ const B = process.env.API || 'http://127.0.0.1:8787/api';
 let pass = 0, failN = 0;
 const ok = (cond, label) => { if (cond) { pass++; } else { failN++; console.log('ÉCHEC :', label); } };
 async function call(method, path, body, headers = {}) {
-  const r = await fetch(B + path, { method, headers: Object.assign({ 'Content-Type': 'application/json', Origin: 'http://localhost:5210' }, headers), body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(B + path, { method, headers: Object.assign({ 'Content-Type': 'application/json', Origin: process.env.ORIGIN || 'http://localhost:5210' }, headers), body: body ? JSON.stringify(body) : undefined });
   let j = {}; try { j = await r.json(); } catch (e) {}
   return { status: r.status, body: j, cors: r.headers.get('access-control-allow-origin') };
 }
@@ -13,7 +13,7 @@ const Bt = { email: 'prof.b.' + tag + '@test.ci', password: 'motdepasse-B1', nam
 const fiche = { nom: 'Konan', prenom: 'Aïcha', matricule: '22-01', sang: 'O+', medical: 'Asthme', consent: true, contacts: [{ nom: 'Konan Marie', lien: 'Mère', tel: '0707123456' }, { nom: 'Yao Serge', lien: 'Oncle / Tante', tel: '+2250505998877' }] };
 
 let r = await call('POST', '/auth/signup', { email: 'bad', password: 'x', name: '' }); ok(r.status === 400, 'signup invalide refusé');
-r = await call('POST', '/auth/signup', A); ok(r.status === 200 && r.body.token, 'signup A'); const tA = r.body.token; ok(r.cors === 'http://localhost:5210', 'CORS origine autorisée');
+r = await call('POST', '/auth/signup', A); ok(r.status === 200 && r.body.token, 'signup A'); const tA = r.body.token; ok(r.cors === (process.env.ORIGIN || 'http://localhost:5210'), 'CORS origine autorisée');
 r = await call('POST', '/auth/signup', A); ok(r.status === 409, 'doublon e-mail refusé');
 r = await call('POST', '/auth/signup', Bt); const tB = r.body.token; ok(!!tB, 'signup B');
 r = await call('POST', '/auth/login', { email: A.email, password: 'mauvais' }); ok(r.status === 401, 'mauvais mot de passe refusé');
