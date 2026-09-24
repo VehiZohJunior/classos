@@ -18,6 +18,8 @@
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>',
     userplus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>',
+    book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M12 7v6M9 10h6"/></svg>',
+    down: '<svg class="acc-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
     paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>'
   };
 
@@ -175,6 +177,7 @@
     if (h[0] === 'c' && getClass(h[1])) return renderClass(view, getClass(h[1]));
     if (h[0] === 's' && getStudent(getClass(h[1]), h[2])) return renderSheet(view, getClass(h[1]), getStudent(getClass(h[1]), h[2]));
     if (h[0] === 'urgence') return renderUrgence(view);
+    if (h[0] === 'repertoire') return renderRepertoire(view);
     if (h[0] === 'reglages') return renderSettings(view);
     if (h[0] === 'import') return importFiche(view, h.slice(1).join('/'));
     return renderHome(view);
@@ -221,6 +224,8 @@
         '<div class="stat"><b>' + total + '</b><span>fiche' + (total > 1 ? 's' : '') + ' enregistrée' + (total > 1 ? 's' : '') + '</span></div>' +
         '<div class="stat"><b>' + withMed + '</b><span>info' + (withMed > 1 ? 's' : '') + ' médicale' + (withMed > 1 ? 's' : '') + '</span></div></div>';
       html += '<button class="btn btn-red btn-block btn-lg" id="createBig">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button>';
+      html += '<button class="row" id="repBtn" style="margin-top:10px"><div class="class-icon" style="background:var(--red-soft);color:var(--red-dark)">' + ICON.book + '</div>' +
+        '<div class="grow"><div class="title">Répertoire d’urgence étudiant</div><div class="meta">Tous les contacts de vos ' + total + ' étudiant' + (total > 1 ? 's' : '') + '</div></div>' + ICON.chev + '</button>';
       html += '<div class="section-title">Mes classes</div><div class="list">';
       db.classes.forEach(function (c) {
         html += '<div class="row" data-cls="' + esc(c.id) + '" role="button" tabindex="0"><div class="class-icon">' + esc((c.name[0] || '?').toUpperCase()) + '</div>' +
@@ -239,6 +244,7 @@
     view.querySelectorAll('[data-edit]').forEach(function (b) { b.onclick = function () { newClassModal(getClass(b.dataset.edit)); }; });
     view.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { deleteClass(getClass(b.dataset.del)); }; });
     var cb = $('createBig'); if (cb) cb.onclick = createContactsPickClass;
+    var rb = $('repBtn'); if (rb) rb.onclick = function () { go('/repertoire'); };
     var nc = $('newClass'); if (nc) nc.onclick = function () { newClassModal(null); };
     var ib = $('installBtn'); if (ib) ib.onclick = function () { installEvt.prompt(); installEvt = null; };
   }
@@ -488,6 +494,82 @@
     };
   }
 
+  /* ======================= Répertoire d'urgence étudiant ======================= */
+  var repState = { q: '', cls: '' };
+  function renderRepertoire(view) {
+    var total = totalStudents();
+    setHeader('Répertoire d’urgence', total + ' étudiant' + (total > 1 ? 's' : ''), true);
+    if (!total) {
+      view.innerHTML = '<div class="empty">' + ICON.book + '<h3>Le répertoire est vide</h3><p>Ajoutez d’abord les fiches de vos étudiants.</p>' +
+        '<button class="btn btn-red btn-lg" id="repCreate">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button></div>';
+      $('repCreate').onclick = createContactsPickClass;
+      return;
+    }
+    if (repState.cls && !getClass(repState.cls)) repState.cls = '';
+    var html = '<div class="search">' + ICON.search + '<input id="rq" type="search" placeholder="Rechercher un étudiant…" autocomplete="off" value="' + esc(repState.q) + '"></div>';
+    if (db.classes.length > 1) {
+      html += '<div class="rep-filter" role="tablist" aria-label="Filtrer par classe">' +
+        '<button class="chip-f" data-f="" aria-pressed="' + (!repState.cls) + '">Toutes</button>' +
+        db.classes.map(function (c) { return '<button class="chip-f" data-f="' + esc(c.id) + '" aria-pressed="' + (repState.cls === c.id) + '">' + esc(c.name) + '</button>'; }).join('') + '</div>';
+    }
+    html += '<div id="repList"></div>';
+    view.innerHTML = html;
+
+    var draw = function () {
+      var all = [];
+      db.classes.forEach(function (c) {
+        if (repState.cls && c.id !== repState.cls) return;
+        c.students.forEach(function (s) { all.push({ s: s, c: c }); });
+      });
+      var q = norm(repState.q);
+      if (q) all = all.filter(function (x) { return norm(x.s.prenom + ' ' + x.s.nom + ' ' + x.s.nom + ' ' + x.s.prenom + ' ' + x.s.matricule).indexOf(q) >= 0; });
+      all.sort(function (a, b) { return (a.s.nom + a.s.prenom).localeCompare(b.s.nom + b.s.prenom, 'fr'); });
+      if (!all.length) { $('repList').innerHTML = '<p class="muted" style="text-align:center;padding:24px">Aucun étudiant trouvé.</p>'; return; }
+      var out = '', letter = '';
+      all.forEach(function (x) {
+        var s = x.s, c = x.c;
+        var L = norm(s.nom).charAt(0).toUpperCase() || '#';
+        if (L !== letter) { letter = L; out += '<div class="rep-letter">' + esc(L) + '</div>'; }
+        var body = '';
+        if (s.medical || s.sang) {
+          body += '<div class="rep-med">' + (s.medical ? '<div><b>⚠ À signaler aux secours</b>' + esc(s.medical) + '</div>' : '') +
+            (s.sang ? '<div class="rep-sang"><b>Groupe sanguin</b>' + esc(s.sang) + '</div>' : '') + '</div>';
+        }
+        s.contacts.forEach(function (k, i) {
+          body += '<div class="rep-contact"><div class="grow"><div class="tiny">Contact ' + (i + 1) + ' · ' + esc(k.lien) + '</div>' +
+            '<div class="rep-cname">' + esc(k.nom) + '</div><div class="rep-num">' + esc(SOS.phonePretty(k.tel)) + '</div></div>' +
+            '<a class="btn btn-green rep-call" href="' + esc(SOS.telHref(k.tel)) + '" aria-label="Appeler ' + esc(k.nom) + '">' + I.phone + 'Appeler</a>' +
+            '<a class="icon-act rep-wa" href="' + esc(SOS.waHref(k.tel)) + '" target="_blank" rel="noopener" aria-label="WhatsApp ' + esc(k.nom) + '">' + I.wa + '</a></div>';
+        });
+        body += '<a class="rep-more" href="#/s/' + esc(c.id) + '/' + esc(s.id) + '">Voir la fiche d’urgence complète →</a>';
+        var badges = (s.medical ? '<span class="badge badge-red">⚠ Info médicale</span>' : '') + (s.contacts.length < 2 ? '<span class="badge badge-amber">1 seul contact</span>' : '');
+        out += '<div class="acc" data-id="' + esc(s.id) + '">' +
+          '<button class="acc-head" type="button" aria-expanded="false" aria-controls="acc-' + esc(s.id) + '">' +
+          '<div class="avatar">' + esc(initials(s)) + '</div>' +
+          '<div class="grow"><div class="title">' + esc(fullName(s)) + '</div><div class="meta">' + esc(c.name) + '</div>' + (badges ? '<div class="badges">' + badges + '</div>' : '') + '</div>' +
+          ICON.down + '</button>' +
+          '<div class="acc-body" id="acc-' + esc(s.id) + '" hidden>' + body + '</div></div>';
+      });
+      $('repList').innerHTML = out;
+      $('repList').querySelectorAll('.acc-head').forEach(function (h) {
+        h.onclick = function () {
+          var open = h.getAttribute('aria-expanded') === 'true';
+          h.setAttribute('aria-expanded', open ? 'false' : 'true');
+          h.nextElementSibling.hidden = open;
+        };
+      });
+    };
+    $('rq').oninput = function () { repState.q = $('rq').value; draw(); };
+    view.querySelectorAll('.chip-f').forEach(function (b) {
+      b.onclick = function () {
+        repState.cls = b.dataset.f;
+        view.querySelectorAll('.chip-f').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        draw();
+      };
+    });
+    draw();
+  }
+
   /* ======================= Mode urgence ======================= */
   function renderUrgence(view) {
     setHeader('Urgence', 'Qui a un malaise ?', true);
@@ -665,7 +747,7 @@
 
     html += '<div class="card"><h2>Confidentialité</h2><p class="muted" style="margin:0 0 12px">ClasSos ne possède aucun serveur : aucune fiche n\'est envoyée sur Internet. Les informations servent uniquement à prévenir les proches ou les secours. Supprimez les classes en fin d\'année.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="wipeAll">Effacer toutes les données de ce téléphone</button></div>' +
-      '<p class="tiny" style="text-align:center">ClasSos · version 1.2 · <b>' + SOS.SIGNATURE + '</b></p>';
+      '<p class="tiny" style="text-align:center">ClasSos · version 1.3 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
 
     $('setForm').onsubmit = function (e) {
