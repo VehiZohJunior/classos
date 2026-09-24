@@ -15,6 +15,9 @@
     chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>',
     print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>',
+    userplus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>',
     paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>'
   };
 
@@ -91,6 +94,64 @@
     return close;
   }
 
+  /* Confirmation intégrée à l'appli (fonctionne aussi dans le navigateur de WhatsApp) */
+  function confirmModal(title, text, okLabel, onOk) {
+    modal('<h2>' + esc(title) + '</h2><p class="muted" style="margin:0 0 18px">' + text + '</p>' +
+      '<div class="btn-row"><button class="btn btn-ghost" id="cfNo">Annuler</button><button class="btn btn-red" id="cfYes">' + esc(okLabel) + '</button></div>',
+      function (m, close) {
+        m.querySelector('#cfNo').onclick = close;
+        m.querySelector('#cfYes').onclick = function () { close(); onOk(); };
+      });
+  }
+
+  function deleteClass(cls) {
+    var n = cls.students.length;
+    confirmModal('Supprimer la classe ?', '« <b>' + esc(cls.name) + '</b> » et ses <b>' + n + ' fiche' + (n > 1 ? 's' : '') + '</b> seront effacées de ce téléphone. Cette action est définitive.', 'Supprimer la classe', function () {
+      db.classes = db.classes.filter(function (c) { return c.id !== cls.id; });
+      persist();
+      if (location.hash === '' || location.hash === '#/' || location.hash === '#') route(); else go('/');
+      toast('Classe supprimée');
+    });
+  }
+
+  /* Bouton principal : toutes les façons d'ajouter des contacts d'urgence */
+  var pendingChooser = null;
+  function createContacts(cls) {
+    var opt = function (id, ic, title, desc) {
+      return '<button class="row" id="' + id + '" style="margin-bottom:10px"><div class="class-icon" style="background:var(--surface-2);color:var(--navy)">' + ic + '</div>' +
+        '<div class="grow"><div class="title" style="white-space:normal">' + title + '</div><div class="meta">' + desc + '</div></div>' + ICON.chev + '</button>';
+    };
+    modal('<h2>Créer contacts étudiants d’urgence</h2><p class="muted">Classe : <b>' + esc(cls.name) + '</b>. Choisissez comment ajouter les étudiants.</p>' +
+      opt('chInvite', ICON.qr, 'Inviter les étudiants', 'Ils remplissent leur fiche sur leur téléphone : QR code, WhatsApp ou SMS.') +
+      opt('chScan', ICON.scan, 'Scanner les fiches', 'Scannez le QR code affiché sur le téléphone de chaque étudiant.') +
+      opt('chManual', ICON.edit, 'Saisir moi-même', 'Vous remplissez la fiche d’un étudiant.') +
+      opt('chPaste', ICON.paste, 'Coller une fiche reçue', 'Message WhatsApp ou SMS envoyé par un étudiant.') +
+      opt('chPaper', ICON.print, 'Imprimer des formulaires papier', 'Pour les étudiants sans téléphone, à saisir ensuite.'),
+      function (m, close) {
+        m.querySelector('#chInvite').onclick = function () { close(); inviteModal(cls); };
+        m.querySelector('#chScan').onclick = function () { close(); openScanner(cls); };
+        m.querySelector('#chManual').onclick = function () { close(); studentForm(cls); };
+        m.querySelector('#chPaste').onclick = function () { close(); pasteModal(cls); };
+        m.querySelector('#chPaper').onclick = function () { close(); printBlank(cls); };
+      });
+  }
+
+  /* Depuis l'accueil : choisir la classe (ou en créer une) */
+  function createContactsPickClass() {
+    if (!db.classes.length) { newClassModal(null, true); return; }
+    if (db.classes.length === 1) { pendingChooser = db.classes[0].id; go('/c/' + db.classes[0].id); return; }
+    modal('<h2>Pour quelle classe ?</h2><p class="muted">Choisissez la classe des étudiants.</p>' +
+      db.classes.map(function (c) {
+        return '<button class="row" data-pick="' + esc(c.id) + '" style="margin-bottom:10px"><div class="class-icon">' + esc((c.name[0] || '?').toUpperCase()) + '</div>' +
+          '<div class="grow"><div class="title">' + esc(c.name) + '</div><div class="meta">' + c.students.length + ' étudiant' + (c.students.length > 1 ? 's' : '') + '</div></div>' + ICON.chev + '</button>';
+      }).join('') +
+      '<button class="btn btn-ghost btn-block" id="pickNew">' + ICON.plus + 'Nouvelle classe</button>',
+      function (m, close) {
+        m.querySelectorAll('[data-pick]').forEach(function (b) { b.onclick = function () { close(); pendingChooser = b.dataset.pick; go('/c/' + b.dataset.pick); }; });
+        m.querySelector('#pickNew').onclick = function () { close(); newClassModal(null, true); };
+      });
+  }
+
   function setHeader(title, sub, back) {
     $('title').innerHTML = esc(title) + (sub ? '<span class="sub">' + esc(sub) + '</span>' : '');
     $('backBtn').hidden = !back;
@@ -146,10 +207,10 @@
       html += '<div class="empty">' + ICON.users +
         '<h3>Bienvenue dans ClasSos</h3>' +
         '<p>Collectez en quelques minutes les contacts à prévenir si un étudiant fait un malaise pendant votre cours — même quand son téléphone est éteint.</p>' +
-        '<button class="btn btn-red btn-lg" id="newClass">' + ICON.plus + 'Créer ma première classe</button></div>' +
+        '<button class="btn btn-red btn-lg" id="createBig">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button></div>' +
         '<div class="section-title">Comment ça marche</div>' +
         '<div class="card"><ol style="margin:0;padding-left:20px;line-height:1.8" class="muted">' +
-        '<li><b>Créez une classe</b> (ex. « Licence 2 — Groupe A »).</li>' +
+        '<li>Appuyez sur <b>Créer contacts étudiants d’urgence</b> et nommez votre classe (ex. « Licence 2 — Groupe A »).</li>' +
         '<li><b>Affichez le QR code d\'invitation</b> au tableau : chaque étudiant remplit sa fiche en 1 minute sur son téléphone.</li>' +
         '<li><b>Scannez le QR code</b> de chaque étudiant. Les fiches sont enregistrées sur votre téléphone.</li>' +
         '<li>En cas de malaise : bouton rouge <b>URGENCE</b> → nom de l\'étudiant → <b>Appeler</b>.</li></ol></div>';
@@ -159,16 +220,26 @@
         '<div class="stat"><b>' + db.classes.length + '</b><span>classe' + (db.classes.length > 1 ? 's' : '') + '</span></div>' +
         '<div class="stat"><b>' + total + '</b><span>fiche' + (total > 1 ? 's' : '') + ' enregistrée' + (total > 1 ? 's' : '') + '</span></div>' +
         '<div class="stat"><b>' + withMed + '</b><span>info' + (withMed > 1 ? 's' : '') + ' médicale' + (withMed > 1 ? 's' : '') + '</span></div></div>';
+      html += '<button class="btn btn-red btn-block btn-lg" id="createBig">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button>';
       html += '<div class="section-title">Mes classes</div><div class="list">';
       db.classes.forEach(function (c) {
-        html += '<button class="row" data-cls="' + esc(c.id) + '"><div class="class-icon">' + esc((c.name[0] || '?').toUpperCase()) + '</div>' +
-          '<div class="grow"><div class="title">' + esc(c.name) + '</div><div class="meta">' + c.students.length + ' étudiant' + (c.students.length > 1 ? 's' : '') + '</div></div>' + ICON.chev + '</button>';
+        html += '<div class="row" data-cls="' + esc(c.id) + '" role="button" tabindex="0"><div class="class-icon">' + esc((c.name[0] || '?').toUpperCase()) + '</div>' +
+          '<div class="grow"><div class="title">' + esc(c.name) + '</div><div class="meta">' + c.students.length + ' étudiant' + (c.students.length > 1 ? 's' : '') + '</div></div>' +
+          '<button class="icon-act" type="button" data-edit="' + esc(c.id) + '" aria-label="Modifier la classe">' + ICON.edit + '</button>' +
+          '<button class="icon-act danger" type="button" data-del="' + esc(c.id) + '" aria-label="Supprimer la classe">' + ICON.trash + '</button></div>';
       });
       html += '</div><div style="height:14px"></div><button class="btn btn-ghost btn-block" id="newClass">' + ICON.plus + 'Nouvelle classe</button>';
     }
     view.innerHTML = html + SIG;
-    view.querySelectorAll('[data-cls]').forEach(function (b) { b.onclick = function () { go('/c/' + b.dataset.cls); }; });
-    var nc = $('newClass'); if (nc) nc.onclick = newClassModal;
+    view.querySelectorAll('[data-cls]').forEach(function (b) {
+      var open = function (e) { if (e.target.closest('.icon-act')) return; go('/c/' + b.dataset.cls); };
+      b.onclick = open;
+      b.onkeydown = function (e) { if (e.key === 'Enter') open(e); };
+    });
+    view.querySelectorAll('[data-edit]').forEach(function (b) { b.onclick = function () { newClassModal(getClass(b.dataset.edit)); }; });
+    view.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { deleteClass(getClass(b.dataset.del)); }; });
+    var cb = $('createBig'); if (cb) cb.onclick = createContactsPickClass;
+    var nc = $('newClass'); if (nc) nc.onclick = function () { newClassModal(null); };
     var ib = $('installBtn'); if (ib) ib.onclick = function () { installEvt.prompt(); installEvt = null; };
   }
 
@@ -200,9 +271,9 @@
       });
   }
 
-  function newClassModal(existing) {
+  function newClassModal(existing, thenCreate) {
     var editing = existing && existing.id;
-    modal('<h2>' + (editing ? 'Renommer la classe' : 'Nouvelle classe') + '</h2><p class="muted">Donnez un nom clair : les étudiants le verront sur leur fiche.</p>' +
+    modal('<h2>' + (editing ? 'Modifier la classe' : 'Nouvelle classe') + '</h2><p class="muted">Donnez un nom clair : les étudiants le verront sur leur fiche.</p>' +
       '<form id="clsForm"><div class="field"><label for="clsName">Nom de la classe</label><input id="clsName" maxlength="80" placeholder="Ex : Licence 2 Informatique — Groupe A" value="' + esc(editing ? existing.name : '') + '"><div class="err">Indiquez un nom.</div></div>' +
       '<button class="btn btn-primary btn-block btn-lg" type="submit">' + (editing ? 'Enregistrer' : 'Créer la classe') + '</button></form>',
       function (m, close) {
@@ -211,9 +282,11 @@
           e.preventDefault();
           var name = inp.value.trim();
           if (!name) { inp.closest('.field').classList.add('invalid'); return; }
-          if (editing) { existing.name = name; persist(); close(); route(); toast('Classe renommée', 'ok'); return; }
+          if (editing) { existing.name = name; persist(); close(); route(); toast('Classe modifiée', 'ok'); return; }
           var c = { id: uid(), name: name, created: Date.now(), students: [] };
-          db.classes.push(c); persist(); close(); go('/c/' + c.id);
+          db.classes.push(c); persist(); close();
+          if (thenCreate) pendingChooser = c.id;
+          go('/c/' + c.id);
         };
       });
   }
@@ -221,23 +294,21 @@
   /* ======================= Classe ======================= */
   function renderClass(view, cls) {
     setHeader(cls.name, cls.students.length + ' fiche' + (cls.students.length > 1 ? 's' : ''), true);
-    var html = '<div class="btn-row" style="margin-bottom:10px">' +
-      '<button class="btn btn-primary" id="inviteBtn">' + ICON.qr + 'Inviter les étudiants</button>' +
-      '<button class="btn btn-red" id="scanBtn">' + ICON.scan + 'Scanner les fiches</button></div>' +
-      '<div class="btn-row" style="margin-bottom:18px">' +
-      '<button class="btn btn-ghost" id="manualBtn">' + ICON.plus + 'Saisie manuelle</button>' +
-      '<button class="btn btn-ghost" id="pasteBtn">' + ICON.paste + 'Coller une fiche</button></div>';
+    var html = '<button class="btn btn-red btn-block btn-lg" id="createBtn">' + ICON.userplus + 'Créer contacts étudiants d’urgence</button>' +
+      '<div class="btn-row class-actions">' +
+      '<button class="btn btn-ghost" id="scanBtn">' + ICON.scan + 'Scanner</button>' +
+      '<button class="btn btn-ghost" id="renameBtn">' + ICON.edit + 'Modifier</button>' +
+      '<button class="btn btn-danger-ghost" id="delClassBtn">' + ICON.trash + 'Supprimer</button></div>';
 
     if (!cls.students.length) {
-      html += '<div class="empty">' + ICON.users + '<h3>Aucune fiche pour l\'instant</h3><p>Appuyez sur <b>Inviter les étudiants</b> et projetez le QR code : chacun remplit sa fiche sur son téléphone. Ensuite, <b>scannez</b> leur QR code.</p></div>';
+      html += '<div class="empty">' + ICON.users + '<h3>Aucune fiche pour l\'instant</h3><p>Appuyez sur <b>Créer contacts étudiants d’urgence</b> : invitez les étudiants par QR code ou lien, ou saisissez leurs fiches vous-même.</p></div>';
     } else {
       html += '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Rechercher un étudiant…" autocomplete="off"></div><div class="list" id="list"></div>';
     }
     html += '<div class="divider"></div><div class="btn-row">' +
       '<button class="btn btn-ghost" id="printBtn"' + (cls.students.length ? '' : ' disabled') + '>' + ICON.print + 'Liste papier</button>' +
       '<button class="btn btn-ghost" id="blankBtn">' + ICON.print + 'Formulaires vierges</button>' +
-      '<button class="btn btn-ghost" id="renameBtn">Renommer</button>' +
-      '<button class="btn btn-danger-ghost" id="delClassBtn">Supprimer la classe</button></div>' +
+      '</div>' +
       '<p class="tiny" style="margin-top:10px">« Liste papier » imprime les contacts de la classe : gardez-en une copie dans la salle en cas de panne de téléphone. « Formulaires vierges » imprime 3 fiches à remplir à la main, pour les étudiants sans smartphone : saisissez-les ensuite avec « Saisie manuelle ».</p>';
     view.innerHTML = html;
 
@@ -245,17 +316,13 @@
       var draw = function () { $('list').innerHTML = studentRows(cls, filterStudents(cls.students, $('q').value)); bindRows($('list')); };
       $('q').oninput = draw; draw();
     }
-    $('inviteBtn').onclick = function () { inviteModal(cls); };
+    $('createBtn').onclick = function () { createContacts(cls); };
     $('scanBtn').onclick = function () { openScanner(cls); };
-    $('manualBtn').onclick = function () { studentForm(cls); };
-    $('pasteBtn').onclick = function () { pasteModal(cls); };
     $('printBtn').onclick = function () { printClass(cls); };
     $('blankBtn').onclick = function () { printBlank(cls); };
     $('renameBtn').onclick = function () { newClassModal(cls); };
-    $('delClassBtn').onclick = function () {
-      if (!confirm('Supprimer la classe « ' + cls.name + ' » et ses ' + cls.students.length + ' fiche(s) ?\n\nCette action est définitive.')) return;
-      db.classes = db.classes.filter(function (c) { return c.id !== cls.id; }); persist(); go('/'); toast('Classe supprimée');
-    };
+    $('delClassBtn').onclick = function () { deleteClass(cls); };
+    if (pendingChooser === cls.id) { pendingChooser = null; createContacts(cls); }
   }
 
   function filterStudents(list, q) {
@@ -415,8 +482,9 @@
     view.innerHTML = html;
     $('editS').onclick = function () { studentForm(cls, s); };
     $('delS').onclick = function () {
-      if (!confirm('Supprimer la fiche de ' + fullName(s) + ' ?')) return;
-      cls.students = cls.students.filter(function (x) { return x.id !== s.id; }); persist(); go('/c/' + cls.id); toast('Fiche supprimée');
+      confirmModal('Supprimer la fiche ?', 'La fiche de <b>' + esc(fullName(s)) + '</b> sera effacée de ce téléphone.', 'Supprimer la fiche', function () {
+        cls.students = cls.students.filter(function (x) { return x.id !== s.id; }); persist(); go('/c/' + cls.id); toast('Fiche supprimée');
+      });
     };
   }
 
@@ -597,7 +665,7 @@
 
     html += '<div class="card"><h2>Confidentialité</h2><p class="muted" style="margin:0 0 12px">ClasSos ne possède aucun serveur : aucune fiche n\'est envoyée sur Internet. Les informations servent uniquement à prévenir les proches ou les secours. Supprimez les classes en fin d\'année.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="wipeAll">Effacer toutes les données de ce téléphone</button></div>' +
-      '<p class="tiny" style="text-align:center">ClasSos · version 1.1 · <b>' + SOS.SIGNATURE + '</b></p>';
+      '<p class="tiny" style="text-align:center">ClasSos · version 1.2 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
 
     $('setForm').onsubmit = function (e) {
@@ -617,9 +685,9 @@
     $('restoreBtn').onclick = function () { $('restoreFile').click(); };
     $('restoreFile').onchange = function (e) { var file = e.target.files[0]; if (file) restoreModal(file); e.target.value = ''; };
     $('wipeAll').onclick = function () {
-      if (!confirm('Effacer TOUTES les classes et fiches de ce téléphone ?\n\nCette action est définitive. Faites une sauvegarde avant si besoin.')) return;
-      if (!confirm('Confirmez-vous vraiment la suppression définitive ?')) return;
-      db = { v: 1, classes: [], settings: { numbers: DEFAULT_NUMBERS.slice() }, lastBackup: 0 }; persist(); go('/'); toast('Données effacées');
+      confirmModal('Tout effacer ?', 'Toutes les classes et fiches de ce téléphone seront effacées définitivement. Faites une sauvegarde avant si besoin.', 'Tout effacer', function () {
+        db = { v: 1, classes: [], settings: { numbers: DEFAULT_NUMBERS.slice() }, lastBackup: 0 }; persist(); go('/'); toast('Données effacées');
+      });
     };
   }
 

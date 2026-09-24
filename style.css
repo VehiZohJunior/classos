@@ -330,3 +330,15 @@ main { max-width: 760px; margin: 0 auto; padding: 16px 16px 120px; }
   .print-sheet .b-consent { font-size: 8pt; line-height: 1.35; margin-top: auto; display: flex; flex-direction: column; gap: 2mm; }
   .print-sheet .b-consent span { align-self: flex-end; font-size: 9pt; }
 }
+
+/* ---------- Actions de classe ---------- */
+.class-actions { margin: 10px 0 18px; }
+.class-actions > .btn { flex: 1 1 90px; padding: 10px 8px; font-size: 14.5px; }
+.icon-act {
+  appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; cursor: pointer; flex: none;
+}
+.icon-act svg { width: 19px; height: 19px; }
+.icon-act:hover { background: var(--surface-2); }
+.icon-act.danger { color: var(--red); border-color: #F2C4C4; }
+#createBig { margin-bottom: 4px; }
