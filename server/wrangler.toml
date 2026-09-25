@@ -9,3 +9,5 @@ database_id = "e2101906-861e-4745-93a9-28c198544791"
 
 [vars]
 ALLOWED_ORIGINS = "https://vehizohjunior.github.io,http://localhost:5210"
+# Identifiant client OAuth Google (public) : console.cloud.google.com → Identifiants
+GOOGLE_CLIENT_ID = ""

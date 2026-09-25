@@ -52,7 +52,7 @@
     $('view').innerHTML = '<div class="card" style="max-width:460px;margin:30px auto"><h2>Accès développeur</h2>' +
       (sharedTried
         ? '<p class="muted">Votre compte ClasSos est bien sur cet appareil, mais l’accès développeur n’est <b>pas encore activé</b>. Envoyez votre nom au développeur de l’appli pour l’activer, puis rouvrez cette page.</p>'
-        : '<p class="muted">Aucun mot de passe n’est nécessaire.</p><ol class="muted" style="padding-left:20px;line-height:1.8;margin:0 0 14px"><li>Ouvrez la <a href="../admin/" style="font-weight:700">console administrateur</a> sur cet appareil.</li><li>Tapez votre nom et touchez « Commencer ».</li><li>Faites activer l’accès développeur, puis revenez sur cette page.</li></ol>' +
+        : '<p class="muted">Aucun mot de passe n’est nécessaire.</p><ol class="muted" style="padding-left:20px;line-height:1.8;margin:0 0 14px"><li>Ouvrez la <a href="../admin/" style="font-weight:700">console administrateur</a> sur cet appareil.</li><li>Connectez-vous (avec Google ou votre nom).</li><li>Faites activer l’accès développeur, puis revenez sur cette page.</li></ol>' +
           '<a class="btn btn-primary btn-block btn-lg" href="../admin/">Ouvrir la console administrateur</a>') +
       (sharedTried ? '<button class="btn btn-primary btn-block btn-lg" id="retryDev" type="button">Réessayer</button>' : '') +
       '</div><p class="tiny" style="text-align:center">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';

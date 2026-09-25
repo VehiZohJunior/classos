@@ -236,11 +236,35 @@
   }
 
   /* Démarrage sans mot de passe : nouveau compte (nom) ou retour avec le code de connexion */
-  var startTab = 'new';
+  var startTab = 'new', othersOpen = false;
   function codeKey(id) { return 'classos.admin.code.' + id; }
+
+  /* Bouton officiel « Continuer avec Google » (chargé seulement quand il s'affiche) */
+  var GOOGLE_ID = window.CLASSOS_GOOGLE_ID || '';
+  function googleButton(el, onCredential) {
+    if (!GOOGLE_ID || !el) return;
+    var draw = function () {
+      if (!document.body.contains(el)) return;
+      google.accounts.id.initialize({ client_id: GOOGLE_ID, callback: function (r) { onCredential(r.credential); }, ux_mode: 'popup', auto_select: false, cancel_on_tap_outside: true });
+      google.accounts.id.renderButton(el, { type: 'standard', theme: 'filled_blue', size: 'large', text: 'continue_with', shape: 'pill', locale: 'fr', width: Math.max(220, Math.min(el.clientWidth || 320, 400)) });
+    };
+    if (window.google && google.accounts && google.accounts.id) return draw();
+    if (!navigator.onLine) { el.innerHTML = '<p class="muted" style="margin:0">Connectez-vous à Internet pour continuer avec Google.</p>'; return; }
+    var s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = draw;
+    s.onerror = function () { el.innerHTML = '<p class="muted" style="margin:0">Google est injoignable. Vérifiez Internet puis rouvrez la page.</p>'; };
+    document.head.appendChild(s);
+  }
+
   function renderStart(view) {
     var isNew = startTab === 'new';
-    view.innerHTML = '<h2 style="font-size:20px;text-align:center;margin:6px 0 14px">Bienvenue sur ClasSos</h2>' +
+    var gHtml = GOOGLE_ID
+      ? '<div class="card" style="text-align:center"><p class="muted" style="margin:0 0 14px">Connectez-vous avec votre <b>compte Google</b> : vous retrouverez vos classes et vos répertoires sur <b>n’importe quel téléphone ou ordinateur</b>. Rien à retenir.</p>' +
+        '<div id="gBtn" style="display:flex;justify-content:center;min-height:44px"></div>' +
+        '<div class="err" id="gErr" style="display:block;color:var(--red);font-size:14px;margin:10px 0 0"></div></div>' +
+        '<details class="card" id="others"' + (othersOpen ? ' open' : '') + '><summary style="cursor:pointer;font-weight:700">Autres options (sans Google)</summary><div style="margin-top:12px">'
+      : '';
+    view.innerHTML = '<h2 style="font-size:20px;text-align:center;margin:6px 0 14px">Bienvenue sur ClasSos</h2>' + gHtml +
       '<div class="seg" role="tablist"><button type="button" id="tabNew" aria-pressed="' + isNew + '">Nouveau compte</button><button type="button" id="tabBack" aria-pressed="' + !isNew + '">J’ai déjà un compte</button></div>' +
       (isNew
         ? '<form id="startForm" class="card" novalidate><div class="field"><label for="s_name">Votre nom</label><input id="s_name" maxlength="60" autocomplete="name" autocapitalize="words" placeholder="Ex : M. Kouassi Yao"><div class="err">Indiquez votre nom.</div></div>' +
@@ -250,17 +274,23 @@
           '<div class="hint">Il vous a été donné à la création du compte. Il est aussi dans Réglages → Mon code de connexion, sur votre ancien téléphone.</div></div>' +
           '<div class="err" id="startErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
           '<button class="btn btn-primary btn-block btn-lg" type="submit">Retrouver mon compte</button></form>') +
+      (GOOGLE_ID ? '<p class="tiny" style="margin:0">Sans Google, le compte reste lié à ce téléphone : notez bien votre code de connexion.</p></div></details>' : '') +
       SIG;
-    $('tabNew').onclick = function () { startTab = 'new'; route(); };
-    $('tabBack').onclick = function () { startTab = 'back'; route(); };
+    $('tabNew').onclick = function () { startTab = 'new'; othersOpen = true; route(); };
+    $('tabBack').onclick = function () { startTab = 'back'; othersOpen = true; route(); };
+    if ($('others')) $('others').ontoggle = function () { othersOpen = $('others').open; };
     var done = function (r, isCreate) {
       session = { token: r.token, teacher: r.teacher }; writeJSON(SESSION_KEY, session);
       if (r.code) try { localStorage.setItem(codeKey(r.teacher.id), r.code); } catch (e) {}
       db = readJSON(cacheKey()) || { teacher: r.teacher, classes: [], syncedAt: 0 };
       go('/'); route(); sync(true);
       /* après l'affichage de l'accueil (sinon la fenêtre serait refermée par le changement d'écran) */
-      setTimeout(function () { if (isCreate && r.code) codeModal(r.code, true); else toast('Compte retrouvé ✓', 'ok'); }, 350);
+      setTimeout(function () { if (isCreate && r.code) codeModal(r.code, true); else toast(r.created ? 'Bienvenue ! Votre compte est créé ✓' : 'Compte retrouvé ✓', 'ok'); }, 350);
     };
+    googleButton($('gBtn'), function (credential) {
+      $('gErr').textContent = '';
+      api('POST', '/auth/google', { credential: credential }).then(function (r) { done(r, false); }, function (err) { $('gErr').textContent = err.message; });
+    });
     if (isNew) {
       var inp = $('s_name');
       $('startForm').onsubmit = function (e) {
@@ -318,7 +348,8 @@
     var total = totalStudents();
     var html = '';
     if (installEvt) html += '<div class="notice">' + I.info + '<span style="flex:1"><b>Installez ClasSos sur ce téléphone</b> pour l’ouvrir en un geste, même sans Internet.</span><button class="btn btn-primary" id="installBtn" style="min-height:38px;padding:6px 14px">Installer</button></div>';
-    if (t.device && !t.hasCode) html += '<div class="notice warn">' + I.info + '<span style="flex:1"><b>Protégez votre compte :</b> créez votre code de connexion pour le retrouver sur un autre téléphone. <a href="#/reglages" style="font-weight:700">Créer mon code</a></span></div>';
+    if (GOOGLE_ID && t.device) html += '<div class="notice warn">' + I.info + '<span style="flex:1"><b>Protégez votre compte :</b> reliez votre compte Google pour le retrouver sur n’importe quel téléphone, sans code. <a href="#/reglages" style="font-weight:700">Relier Google</a></span></div>';
+    else if (t.device && !t.hasCode) html +='<div class="notice warn">' + I.info + '<span style="flex:1"><b>Protégez votre compte :</b> créez votre code de connexion pour le retrouver sur un autre téléphone. <a href="#/reglages" style="font-weight:700">Créer mon code</a></span></div>';
     var legacy = legacyData();
     if (legacy) html += '<div class="notice warn">' + I.info + '<span style="flex:1"><b>' + legacy.count + ' fiche' + (legacy.count > 1 ? 's' : '') + ' de l’ancienne version</b> sont sur ce téléphone. <a href="#/reglages" style="font-weight:700">Les importer dans mon compte</a></span></div>';
 
@@ -679,6 +710,8 @@
     var legacy = legacyData();
     var html = '<button class="row" id="goTeacher" style="margin-bottom:14px"><div class="class-icon" style="background:var(--surface-2);color:var(--navy)">' + ICON.id + '</div>' +
       '<div class="grow"><div class="title">Informations de l’enseignant</div><div class="meta">' + esc(teacherLabel() || 'À compléter') + '</div></div>' + ICON.chev + '</button>';
+    if (GOOGLE_ID && t.device) html = '<div class="card" style="border:2px solid var(--navy)"><h2>Relier mon compte Google (recommandé)</h2><p class="muted" style="margin:0 0 14px">Votre compte ne dépendra plus de ce téléphone ni d’un code : vous le retrouverez partout avec « Continuer avec Google ». Vos classes et répertoires sont conservés.</p>' +
+      '<div id="gLink" style="display:flex;justify-content:center;min-height:44px"></div></div>' + html;
     if (legacy) {
       html += '<div class="card"><h2>Fiches de l’ancienne version</h2><p class="muted">' + legacy.count + ' fiche(s) enregistrée(s) sur ce téléphone avant la création des comptes. Importez-les dans votre compte pour les retrouver dans le répertoire.</p>' +
         '<button class="btn btn-primary btn-block" id="importLegacy">Importer dans mon compte</button></div>';
@@ -688,7 +721,7 @@
         return '<div class="grid-2"><div class="field"><label>Service ' + (i + 1) + '</label><input name="nl' + i + '" maxlength="24" value="' + esc(n.label) + '"' + (i === 3 ? ' placeholder="Ex : Infirmerie"' : '') + '></div>' +
           '<div class="field"><label>Numéro</label><input name="nn' + i + '" type="tel" maxlength="20" value="' + esc(n.num) + '"></div></div>';
       }).join('') + '<button class="btn btn-primary btn-block" type="submit">Enregistrer</button></form>';
-    if (!t.device) html += '<form id="pwForm" class="card" novalidate><h2>Mot de passe</h2>' +
+    if (!t.device && !t.google) html += '<form id="pwForm" class="card" novalidate><h2>Mot de passe</h2>' +
       '<div class="field"><label for="pw1">Mot de passe actuel</label><input id="pw1" type="password" autocomplete="current-password"></div>' +
       '<div class="field"><label for="pw2">Nouveau mot de passe</label><input id="pw2" type="password" autocomplete="new-password"><div class="hint">8 caractères minimum.</div></div>' +
       '<button class="btn btn-ghost btn-block" type="submit">Changer le mot de passe</button></form>';
@@ -698,7 +731,8 @@
       '<button class="btn btn-' + (myCode ? 'ghost' : 'primary') + ' btn-block" id="newCode" style="margin-top:10px">' + (myCode || t.hasCode ? 'Créer un nouveau code (l’ancien ne marchera plus)' : 'Créer mon code de connexion') + '</button></div>' +
       '<div class="card"><h2>Se déconnecter</h2><p class="muted" style="margin:0 0 12px">Vos classes et vos répertoires restent dans votre compte. Pour revenir : « J’ai déjà un compte » puis votre code.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter</button></div>' :
-      '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0 0 12px">Connecté(e) : <b>' + esc(t.email || '') + '</b>.</p>' +
+      '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0 0 12px">' + (t.google ? 'Compte Google' : 'Connecté(e)') + ' : <b>' + esc(t.email || '') + '</b>.' +
+      (t.google ? ' Pour revenir sur n’importe quel appareil : « Continuer avec Google ».' : '') + '</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter de ce téléphone</button></div>') +
       '<p class="tiny" style="text-align:center">ClasSos · version 2.0 · <b>' + SOS.SIGNATURE + '</b></p>';
     view.innerHTML = html;
@@ -711,6 +745,10 @@
       api('PUT', '/teacher', { civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers: nums.length ? nums : DEFAULT_NUMBERS })
         .then(function () { sync(true); toast('Numéros d’urgence enregistrés', 'ok'); }, function (err) { toast(err.message, 'err'); });
     };
+    googleButton($('gLink'), function (credential) {
+      if (!needOnline()) return;
+      api('POST', '/auth/google', { credential: credential }).then(function () { sync(true); toast('Compte Google relié ✓ Vous pouvez vous connecter partout.', 'ok'); }, function (err) { toast(err.message, 'err'); });
+    });
     var sc = $('showCode'); if (sc) sc.onclick = function () { codeModal(myCode, false); };
     var nc = $('newCode'); if (nc) nc.onclick = function () {
       var mk = function () {
@@ -726,7 +764,7 @@
       api('POST', '/auth/password', { current: $('pw1').value, next: $('pw2').value }).then(function () { $('pw1').value = ''; $('pw2').value = ''; toast('Mot de passe changé', 'ok'); }, function (err) { toast(err.message, 'err'); });
     };
     if ($('logoutBtn')) $('logoutBtn').onclick = function () {
-      if (!t.device) { confirmModal('Se déconnecter ?', 'La copie du répertoire sera effacée de ce téléphone. Vos fiches restent dans votre compte.', 'Se déconnecter', function () { logout(false); }); return; }
+      if (!t.device) { confirmModal('Se déconnecter ?', 'La copie du répertoire sera effacée de ce téléphone. Vos fiches restent dans votre compte.' + (t.google ? ' Pour revenir : « Continuer avec Google ».' : ''), 'Se déconnecter', function () { logout(false); }); return; }
       /* Compte sans mot de passe : on montre toujours le code avant de partir, pour pouvoir revenir */
       var ask = function (code, fresh) {
         var msg = 'Mon code de connexion ClasSos : ' + code + ' (pour retrouver mon compte et mes répertoires).';

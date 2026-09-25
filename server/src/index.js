@@ -3,7 +3,7 @@
    Chaque enseignant ne voit que ses propres classes. La console dev ne voit aucune donnée personnelle d'étudiant. */
 
 const VERSION = '2.0.0';
-const SESSION_DAYS = 90;
+const SESSION_DAYS = 365; // session glissante : prolongée tant que le compte est utilisé
 const PBKDF2_ITER = 30000;
 
 /* ======================= Utilitaires ======================= */
@@ -103,6 +103,45 @@ function loginCode() {
 function normCode(c) { return String(c || '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^A-Z0-9]/g, ''); }
 async function codeHash(c) { return sha256('classos-code:' + normCode(c)); }
 
+/* Connexion Google : vérification du jeton d'identité (signature RS256 avec les clés publiques de Google) */
+const GOOGLE_SESSION_DAYS = 365;
+let googleKeys = null, googleKeysExp = 0;
+function b64urlBytes(s) {
+  s = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+}
+async function googleKey(kid) {
+  if (!googleKeys || googleKeysExp < now()) {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    if (!res.ok) fail(503, 'Google est injoignable. Réessayez dans un instant.');
+    const ma = /max-age=(\d+)/.exec(res.headers.get('cache-control') || '');
+    googleKeys = (await res.json()).keys || [];
+    googleKeysExp = now() + (ma ? Number(ma[1]) : 3600) * 1000;
+  }
+  return googleKeys.find((k) => k.kid === kid);
+}
+async function verifyGoogle(env, credential) {
+  if (!env.GOOGLE_CLIENT_ID) fail(503, 'La connexion Google n’est pas encore activée.');
+  const bad = 'Connexion Google refusée. Réessayez.';
+  const parts = String(credential || '').split('.');
+  if (parts.length !== 3) fail(400, bad);
+  let head, p;
+  try {
+    head = JSON.parse(new TextDecoder().decode(b64urlBytes(parts[0])));
+    p = JSON.parse(new TextDecoder().decode(b64urlBytes(parts[1])));
+  } catch (e) { fail(400, bad); }
+  if (head.alg !== 'RS256') fail(401, bad);
+  const jwk = await googleKey(head.kid);
+  if (!jwk) fail(401, bad);
+  const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+  if (!(await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64urlBytes(parts[2]), enc.encode(parts[0] + '.' + parts[1])))) fail(401, bad);
+  const t = Math.floor(now() / 1000);
+  if (!['accounts.google.com', 'https://accounts.google.com'].includes(p.iss) || p.aud !== env.GOOGLE_CLIENT_ID || !(p.exp > t) || !p.sub) fail(401, bad);
+  if (p.email_verified !== true && p.email_verified !== 'true') fail(401, 'Votre adresse Google n’est pas vérifiée.');
+  return p;
+}
+
 async function createSession(env, teacherId, days) {
   const token = randomToken(32);
   const t = now();
@@ -131,7 +170,7 @@ function teacherPublic(t) {
   let numbers = [];
   try { numbers = JSON.parse(t.numbers || '[]'); } catch (e) {}
   const device = isDevice(t);
-  return { id: t.id, email: device ? '' : t.email, device, hasCode: !!t.login_hash, role: t.role, civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers };
+  return { id: t.id, email: device ? '' : t.email, device, google: !!t.google_sub, hasCode: !!t.login_hash, role: t.role, civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers };
 }
 function studentOut(s) {
   let contacts = [];
@@ -233,6 +272,37 @@ async function handle(req, env) {
       if (!t) fail(401, 'Code incorrect. Vérifiez-le (il se trouve dans Réglages → Mon code de connexion).');
       if (t.status !== 'active') fail(403, 'Ce compte est suspendu. Contactez le support ClasSos.');
       return { token: await createSession(env, t.id, DEVICE_SESSION_DAYS), teacher: teacherPublic(t) };
+    }
+    /* Connexion Google : retrouver son compte sur n'importe quel appareil, sans code ni mot de passe.
+       Déjà connecté (jeton de session) : relie le compte Google au compte actuel, classes comprises. */
+    if (r[1] === 'google' && m === 'POST') {
+      await limit(env, 'google:' + ip, 30, 900000);
+      const b = await body();
+      const g = await verifyGoogle(env, b.credential);
+      const email = clip(g.email, 120).toLowerCase();
+      let t = await env.DB.prepare('SELECT * FROM teachers WHERE google_sub = ?').bind(g.sub).first();
+      if ((req.headers.get('Authorization') || '').startsWith('Bearer ')) {
+        const me = await auth(env, req);
+        if (t && t.id !== me.id) fail(409, 'Ce compte Google est déjà relié à un autre compte ClasSos.');
+        if (!t) {
+          if (me.google_sub) fail(409, 'Votre compte ClasSos est déjà relié à un autre compte Google.');
+          const other = await env.DB.prepare('SELECT id FROM teachers WHERE email = ? AND id <> ?').bind(email, me.id).first();
+          await env.DB.prepare('UPDATE teachers SET google_sub = ?, email = ? WHERE id = ?').bind(g.sub, other ? me.email : email, me.id).run();
+          t = await env.DB.prepare('SELECT * FROM teachers WHERE id = ?').bind(me.id).first();
+        }
+        return { teacher: teacherPublic(t), linked: true };
+      }
+      let created = false;
+      if (!t) {
+        if (await env.DB.prepare('SELECT id FROM teachers WHERE email = ?').bind(email).first()) fail(409, 'Un compte ClasSos utilise déjà cette adresse.');
+        const id = uid();
+        await env.DB.prepare('INSERT INTO teachers (id, email, pass_hash, pass_salt, name, created_at, google_sub) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .bind(id, email, randomToken(32), randomToken(16), clip(g.name || email.split('@')[0], 60), now(), g.sub).run();
+        t = await env.DB.prepare('SELECT * FROM teachers WHERE id = ?').bind(id).first();
+        created = true;
+      }
+      if (t.status !== 'active') fail(403, 'Ce compte est suspendu. Contactez le support ClasSos.');
+      return { token: await createSession(env, t.id, GOOGLE_SESSION_DAYS), teacher: teacherPublic(t), created };
     }
     if (r[1] === 'signup' && m === 'POST') {
       await limit(env, 'signup:' + ip, 8, 3600000);

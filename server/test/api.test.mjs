@@ -77,6 +77,9 @@ r = await call('POST', '/teacher/code', null, { Authorization: 'Bearer ' + tC })
 r = await call('POST', '/auth/code', { code: code1 }); ok(r.status === 401, 'ancien code désactivé');
 r = await call('POST', '/auth/code', { code: code2 }); ok(r.status === 200, 'nouveau code accepté');
 r = await call('POST', '/auth/login', { email: 'compte-x@appareil.classos', password: '' }); ok(r.status === 401, 'impossible de se connecter par e-mail à un compte sans mot de passe');
+// Connexion Google : un faux jeton est toujours refusé
+r = await call('POST', '/auth/google', { credential: 'faux.jeton.google' }); ok([400, 401, 503].includes(r.status) && !r.body.token, 'faux jeton Google refusé');
+r = await call('POST', '/auth/google', {}); ok([400, 503].includes(r.status), 'connexion Google sans jeton refusée');
 console.log(JSON.stringify({ devCandidate: A.email, tokenA: tA }));
 console.log(pass + ' réussis, ' + failN + ' échoué(s)');
 process.exit(failN ? 1 : 0);

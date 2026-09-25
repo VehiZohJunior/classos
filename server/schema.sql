@@ -14,9 +14,11 @@ CREATE TABLE IF NOT EXISTS teachers (
   numbers TEXT NOT NULL DEFAULT '',          -- JSON : numéros d'urgence
   created_at INTEGER NOT NULL,
   last_login INTEGER,
-  login_hash TEXT                            -- code de connexion (haché)
+  login_hash TEXT,                           -- code de connexion (haché)
+  google_sub TEXT                            -- identifiant du compte Google relié
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_login ON teachers(login_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_google ON teachers(google_sub);
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
