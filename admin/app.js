@@ -256,7 +256,8 @@
       if (r.code) try { localStorage.setItem(codeKey(r.teacher.id), r.code); } catch (e) {}
       db = readJSON(cacheKey()) || { teacher: r.teacher, classes: [], syncedAt: 0 };
       go('/'); route(); sync(true);
-      if (isCreate && r.code) codeModal(r.code, true); else toast('Compte retrouvé ✓', 'ok');
+      /* après l'affichage de l'accueil (sinon la fenêtre serait refermée par le changement d'écran) */
+      setTimeout(function () { if (isCreate && r.code) codeModal(r.code, true); else toast('Compte retrouvé ✓', 'ok'); }, 350);
     };
     if (isNew) {
       var inp = $('s_name');
