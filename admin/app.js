@@ -93,6 +93,8 @@
   function logout(expired) {
     if (session && !expired) api('POST', '/auth/logout').catch(function () {});
     try { localStorage.removeItem(cacheKey()); } catch (e) {}
+    if (session && session.teacher && !expired) try { localStorage.removeItem('classos.admin.code.' + session.teacher.id); } catch (e) {}
+    startTab = 'back';
     session = null; db = null;
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
     go('/'); route();
@@ -339,7 +341,7 @@
           '<div class="grow"><div class="title">' + esc(c.name) + '</div><div class="meta">' + c.students.length + ' inscrit' + (c.students.length > 1 ? 's' : '') + '</div>' +
           (paused ? '<div class="badges"><span class="badge badge-amber">En pause</span></div>' : '') + '</div>' + ICON.chev + '</div>';
       });
-      html += '</div>';
+      html += '</div><button class="btn btn-ghost btn-block" id="newClassBtn" style="margin-top:12px">' + ICON.plus + 'Nouvelle classe</button>';
     }
     view.innerHTML = html + SIG;
 
@@ -348,6 +350,7 @@
       b.onclick = open; b.onkeydown = function (e) { if (e.key === 'Enter') open(e); };
     });
     $('createBig').onclick = function () { classModal(null); };
+    var ncb = $('newClassBtn'); if (ncb) ncb.onclick = function () { classModal(null); };
     $('repBtn').onclick = function () { go('/repertoire'); };
     $('teacherBtn').onclick = function () { go('/enseignant'); };
     var rf = $('refreshBtn'); if (rf) rf.onclick = function () { sync().then(function () { toast('Répertoire à jour', 'ok'); }); };
@@ -692,7 +695,9 @@
     var myCode = null; try { myCode = localStorage.getItem(codeKey(t.id)); } catch (e) {}
     html += (t.device ? '<div class="card"><h2>Mon code de connexion</h2><p class="muted">Pour retrouver votre compte et votre répertoire sur un autre téléphone ou navigateur : « J’ai déjà un compte » puis ce code.</p>' +
       (myCode ? '<div class="code-big">' + esc(myCode) + '</div><button class="btn btn-ghost btn-block" id="showCode" style="margin-top:10px">Copier ou m’envoyer le code</button>' : '<p class="muted" style="margin:0 0 10px">' + (t.hasCode ? 'Votre code n’est pas enregistré sur ce téléphone.' : 'Vous n’avez pas encore de code.') + '</p>') +
-      '<button class="btn btn-' + (myCode ? 'ghost' : 'primary') + ' btn-block" id="newCode" style="margin-top:10px">' + (myCode || t.hasCode ? 'Créer un nouveau code (l’ancien ne marchera plus)' : 'Créer mon code de connexion') + '</button></div>' :
+      '<button class="btn btn-' + (myCode ? 'ghost' : 'primary') + ' btn-block" id="newCode" style="margin-top:10px">' + (myCode || t.hasCode ? 'Créer un nouveau code (l’ancien ne marchera plus)' : 'Créer mon code de connexion') + '</button></div>' +
+      '<div class="card"><h2>Se déconnecter</h2><p class="muted" style="margin:0 0 12px">Vos classes et vos répertoires restent dans votre compte. Pour revenir : « J’ai déjà un compte » puis votre code.</p>' +
+      '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter</button></div>' :
       '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0 0 12px">Connecté(e) : <b>' + esc(t.email || '') + '</b>.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter de ce téléphone</button></div>') +
       '<p class="tiny" style="text-align:center">ClasSos · version 2.0 · <b>' + SOS.SIGNATURE + '</b></p>';
@@ -721,7 +726,23 @@
       api('POST', '/auth/password', { current: $('pw1').value, next: $('pw2').value }).then(function () { $('pw1').value = ''; $('pw2').value = ''; toast('Mot de passe changé', 'ok'); }, function (err) { toast(err.message, 'err'); });
     };
     if ($('logoutBtn')) $('logoutBtn').onclick = function () {
-      confirmModal('Se déconnecter ?', 'La copie du répertoire sera effacée de ce téléphone. Vos fiches restent dans votre compte.', 'Se déconnecter', function () { logout(false); });
+      if (!t.device) { confirmModal('Se déconnecter ?', 'La copie du répertoire sera effacée de ce téléphone. Vos fiches restent dans votre compte.', 'Se déconnecter', function () { logout(false); }); return; }
+      /* Compte sans mot de passe : on montre toujours le code avant de partir, pour pouvoir revenir */
+      var ask = function (code, fresh) {
+        var msg = 'Mon code de connexion ClasSos : ' + code + ' (pour retrouver mon compte et mes répertoires).';
+        modal('<h2>Se déconnecter ?</h2><p class="muted">' + (fresh ? 'Voici votre code de connexion. ' : '') + 'Pour revenir plus tard, touchez <b>« J’ai déjà un compte »</b> et tapez ce code :</p>' +
+          '<div class="code-big">' + esc(code) + '</div>' +
+          '<div class="btn-row" style="margin-top:12px"><button class="btn btn-ghost" id="lcCopy" type="button">Copier</button>' +
+          '<a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(msg) + '">' + I.wa + 'M’envoyer sur WhatsApp</a></div>' +
+          '<button class="btn btn-red btn-block btn-lg" id="lcGo" type="button" style="margin-top:12px">J’ai noté mon code : me déconnecter</button>',
+          function (m, close) {
+            m.querySelector('#lcCopy').onclick = function () { copyText(code).then(function () { toast('Code copié', 'ok'); }); };
+            m.querySelector('#lcGo').onclick = function () { close(); logout(false); toast('Déconnecté(e). Revenez avec votre code.', 'ok'); };
+          });
+      };
+      if (myCode) { ask(myCode, false); return; }
+      if (!needOnline()) return;
+      api('POST', '/teacher/code').then(function (r) { try { localStorage.setItem(codeKey(t.id), r.code); } catch (e) {} ask(r.code, true); }, function (err) { toast(err.message, 'err'); });
     };
     var il = $('importLegacy');
     if (il) il.onclick = function () {
