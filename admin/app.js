@@ -241,8 +241,7 @@
       '<div class="err" id="startErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
       '<button class="btn btn-red btn-block btn-lg" type="submit">Commencer</button></form>' +
       '<p class="tiny" style="text-align:center">Votre compte est enregistré sur ce téléphone : utilisez toujours le même téléphone.</p>' +
-      '<details class="qr-more" style="text-align:center"><summary>J’ai un compte avec e-mail et mot de passe</summary><button class="btn btn-ghost" id="toLogin" type="button" style="margin-top:10px">Se connecter</button></details>' + SIG;
-    $('toLogin').onclick = function () { loginMode = 'login'; route(); };
+      SIG;
     var inp = $('s_name');
     $('startForm').onsubmit = function (e) {
       e.preventDefault();

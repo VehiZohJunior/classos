@@ -54,24 +54,10 @@
         ? '<p class="muted">Votre compte ClasSos est bien sur cet appareil, mais l’accès développeur n’est <b>pas encore activé</b>. Envoyez votre nom au développeur de l’appli pour l’activer, puis rouvrez cette page.</p>'
         : '<p class="muted">Aucun mot de passe n’est nécessaire.</p><ol class="muted" style="padding-left:20px;line-height:1.8;margin:0 0 14px"><li>Ouvrez la <a href="../admin/" style="font-weight:700">console administrateur</a> sur cet appareil.</li><li>Tapez votre nom et touchez « Commencer ».</li><li>Faites activer l’accès développeur, puis revenez sur cette page.</li></ol>' +
           '<a class="btn btn-primary btn-block btn-lg" href="../admin/">Ouvrir la console administrateur</a>') +
-      '<details class="qr-more" style="margin-top:16px"><summary>Connexion avec e-mail et mot de passe</summary>' +
-      '<form id="lf" novalidate style="margin-top:10px"><div class="field"><label for="le">E-mail</label><input id="le" type="email" autocomplete="username"></div>' +
-      '<div class="field"><label for="lp">Mot de passe</label><input id="lp" type="password" autocomplete="current-password"></div>' +
-      '<div id="lerr" style="color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
-      '<button class="btn btn-ghost btn-block" type="submit">Se connecter</button></form></details></div>' +
-      '<p class="tiny" style="text-align:center">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';
-    $('lf').onsubmit = function (e) {
-      e.preventDefault();
-      $('lerr').textContent = '';
-      fetch(API + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: $('le').value.trim(), password: $('lp').value }) })
-        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw { message: j.error || 'Erreur' }; return j; }); })
-        .then(function (j) {
-          if (j.teacher.role !== 'dev') { $('lerr').textContent = 'Ce compte n’a pas l’accès développeur.'; fetch(API + '/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + j.token } }); return; }
-          session = { token: j.token, email: j.teacher.email };
-          try { localStorage.setItem(KEY, JSON.stringify(session)); } catch (e) {}
-          load();
-        }, function (err) { $('lerr').textContent = err.message || 'Serveur injoignable.'; });
-    };
+      (sharedTried ? '<button class="btn btn-primary btn-block btn-lg" id="retryDev" type="button">Réessayer</button>' : '') +
+      '</div><p class="tiny" style="text-align:center">ClasSos · <b>' + SOS.SIGNATURE + '</b></p>';
+    var rd = $('retryDev');
+    if (rd) rd.onclick = function () { session = sharedSession(); if (session) load(); else renderLogin(); };
   }
 
   function load() {
