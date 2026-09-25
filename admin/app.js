@@ -233,29 +233,69 @@
     };
   }
 
-  /* Démarrage sans mot de passe : juste le nom, le compte est lié à ce téléphone */
+  /* Démarrage sans mot de passe : nouveau compte (nom) ou retour avec le code de connexion */
+  var startTab = 'new';
+  function codeKey(id) { return 'classos.admin.code.' + id; }
   function renderStart(view) {
+    var isNew = startTab === 'new';
     view.innerHTML = '<h2 style="font-size:20px;text-align:center;margin:6px 0 14px">Bienvenue sur ClasSos</h2>' +
-      '<form id="startForm" class="card" novalidate>' +
-      '<div class="field"><label for="s_name">Votre nom</label><input id="s_name" maxlength="60" autocomplete="name" autocapitalize="words" placeholder="Ex : M. Kouassi Yao"><div class="err">Indiquez votre nom.</div></div>' +
-      '<div class="err" id="startErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
-      '<button class="btn btn-red btn-block btn-lg" type="submit">Commencer</button></form>' +
-      '<p class="tiny" style="text-align:center">Votre compte est enregistré sur ce téléphone : utilisez toujours le même téléphone.</p>' +
+      '<div class="seg" role="tablist"><button type="button" id="tabNew" aria-pressed="' + isNew + '">Nouveau compte</button><button type="button" id="tabBack" aria-pressed="' + !isNew + '">J’ai déjà un compte</button></div>' +
+      (isNew
+        ? '<form id="startForm" class="card" novalidate><div class="field"><label for="s_name">Votre nom</label><input id="s_name" maxlength="60" autocomplete="name" autocapitalize="words" placeholder="Ex : M. Kouassi Yao"><div class="err">Indiquez votre nom.</div></div>' +
+          '<div class="err" id="startErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
+          '<button class="btn btn-red btn-block btn-lg" type="submit">Créer mon compte</button></form>'
+        : '<form id="codeForm" class="card" novalidate><div class="field"><label for="s_code">Votre code de connexion</label><input id="s_code" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="Ex : 7KQM-X3PD-9W" style="font-family:ui-monospace,Consolas,monospace;letter-spacing:.08em;text-transform:uppercase">' +
+          '<div class="hint">Il vous a été donné à la création du compte. Il est aussi dans Réglages → Mon code de connexion, sur votre ancien téléphone.</div></div>' +
+          '<div class="err" id="startErr" style="display:block;color:var(--red);font-size:14px;margin:-4px 0 12px"></div>' +
+          '<button class="btn btn-primary btn-block btn-lg" type="submit">Retrouver mon compte</button></form>') +
       SIG;
-    var inp = $('s_name');
-    $('startForm').onsubmit = function (e) {
-      e.preventDefault();
-      var name = inp.value.trim();
-      inp.closest('.field').classList.toggle('invalid', !name);
-      if (!name) return;
-      var btn = $('startForm').querySelector('button[type=submit]'); busy(btn, true); $('startErr').textContent = '';
-      api('POST', '/auth/start', { name: name }).then(function (r) {
-        session = { token: r.token, teacher: r.teacher }; writeJSON(SESSION_KEY, session);
-        db = { teacher: r.teacher, classes: [], syncedAt: 0 };
-        go('/'); route(); sync(true);
-        toast('Bienvenue ' + name + ' !', 'ok');
-      }, function (err) { busy(btn, false); $('startErr').textContent = err.message; });
+    $('tabNew').onclick = function () { startTab = 'new'; route(); };
+    $('tabBack').onclick = function () { startTab = 'back'; route(); };
+    var done = function (r, isCreate) {
+      session = { token: r.token, teacher: r.teacher }; writeJSON(SESSION_KEY, session);
+      if (r.code) try { localStorage.setItem(codeKey(r.teacher.id), r.code); } catch (e) {}
+      db = readJSON(cacheKey()) || { teacher: r.teacher, classes: [], syncedAt: 0 };
+      go('/'); route(); sync(true);
+      if (isCreate && r.code) codeModal(r.code, true); else toast('Compte retrouvé ✓', 'ok');
     };
+    if (isNew) {
+      var inp = $('s_name');
+      $('startForm').onsubmit = function (e) {
+        e.preventDefault();
+        var name = inp.value.trim();
+        inp.closest('.field').classList.toggle('invalid', !name);
+        if (!name) return;
+        var btn = $('startForm').querySelector('button[type=submit]'); busy(btn, true); $('startErr').textContent = '';
+        api('POST', '/auth/start', { name: name }).then(function (r) { done(r, true); }, function (err) { busy(btn, false); $('startErr').textContent = err.message; });
+      };
+    } else {
+      var ci = $('s_code');
+      ci.addEventListener('input', function () {
+        var raw = ci.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+        ci.value = raw.length > 8 ? raw.slice(0, 4) + '-' + raw.slice(4, 8) + '-' + raw.slice(8) : raw.length > 4 ? raw.slice(0, 4) + '-' + raw.slice(4) : raw;
+      });
+      $('codeForm').onsubmit = function (e) {
+        e.preventDefault();
+        var btn = $('codeForm').querySelector('button[type=submit]'); busy(btn, true); $('startErr').textContent = '';
+        api('POST', '/auth/code', { code: ci.value }).then(function (r) { try { localStorage.setItem(codeKey(r.teacher.id), ci.value.toUpperCase()); } catch (e) {} done(r, false); },
+          function (err) { busy(btn, false); $('startErr').textContent = err.message; });
+      };
+    }
+  }
+
+  /* Le code de connexion : à garder pour retrouver son compte ailleurs */
+  function codeModal(code, fresh) {
+    var msg = 'Mon code de connexion ClasSos : ' + code + ' (à garder : il permet de retrouver mon compte sur un autre téléphone).';
+    modal('<h2>' + (fresh ? 'Compte créé ✓' : 'Mon code de connexion') + '</h2>' +
+      '<p class="muted">Gardez ce code : il vous permet de retrouver votre compte et votre répertoire <b>sur un autre téléphone ou navigateur</b>.</p>' +
+      '<div class="code-big" id="theCode">' + esc(code) + '</div>' +
+      '<div class="btn-row" style="margin-top:12px"><button class="btn btn-ghost" id="copyCode" type="button">Copier</button>' +
+      '<a class="btn btn-green" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(msg) + '">' + I.wa + 'M’envoyer sur WhatsApp</a></div>' +
+      '<button class="btn btn-primary btn-block btn-lg" id="codeOk" type="button" style="margin-top:12px">C’est noté</button>',
+      function (m, close) {
+        m.querySelector('#copyCode').onclick = function () { copyText(code).then(function () { toast('Code copié', 'ok'); }); };
+        m.querySelector('#codeOk').onclick = close;
+      });
   }
 
   /* ======================= Accueil ======================= */
@@ -275,6 +315,7 @@
     var total = totalStudents();
     var html = '';
     if (installEvt) html += '<div class="notice">' + I.info + '<span style="flex:1"><b>Installez ClasSos sur ce téléphone</b> pour l’ouvrir en un geste, même sans Internet.</span><button class="btn btn-primary" id="installBtn" style="min-height:38px;padding:6px 14px">Installer</button></div>';
+    if (t.device && !t.hasCode) html += '<div class="notice warn">' + I.info + '<span style="flex:1"><b>Protégez votre compte :</b> créez votre code de connexion pour le retrouver sur un autre téléphone. <a href="#/reglages" style="font-weight:700">Créer mon code</a></span></div>';
     var legacy = legacyData();
     if (legacy) html += '<div class="notice warn">' + I.info + '<span style="flex:1"><b>' + legacy.count + ' fiche' + (legacy.count > 1 ? 's' : '') + ' de l’ancienne version</b> sont sur ce téléphone. <a href="#/reglages" style="font-weight:700">Les importer dans mon compte</a></span></div>';
 
@@ -647,7 +688,10 @@
       '<div class="field"><label for="pw1">Mot de passe actuel</label><input id="pw1" type="password" autocomplete="current-password"></div>' +
       '<div class="field"><label for="pw2">Nouveau mot de passe</label><input id="pw2" type="password" autocomplete="new-password"><div class="hint">8 caractères minimum.</div></div>' +
       '<button class="btn btn-ghost btn-block" type="submit">Changer le mot de passe</button></form>';
-    html += (t.device ? '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0">Votre compte est lié à <b>ce téléphone</b>. N’effacez pas les données du navigateur et utilisez toujours ce téléphone pour ouvrir ClasSos.</p></div>' :
+    var myCode = null; try { myCode = localStorage.getItem(codeKey(t.id)); } catch (e) {}
+    html += (t.device ? '<div class="card"><h2>Mon code de connexion</h2><p class="muted">Pour retrouver votre compte et votre répertoire sur un autre téléphone ou navigateur : « J’ai déjà un compte » puis ce code.</p>' +
+      (myCode ? '<div class="code-big">' + esc(myCode) + '</div><button class="btn btn-ghost btn-block" id="showCode" style="margin-top:10px">Copier ou m’envoyer le code</button>' : '<p class="muted" style="margin:0 0 10px">' + (t.hasCode ? 'Votre code n’est pas enregistré sur ce téléphone.' : 'Vous n’avez pas encore de code.') + '</p>') +
+      '<button class="btn btn-' + (myCode ? 'ghost' : 'primary') + ' btn-block" id="newCode" style="margin-top:10px">' + (myCode || t.hasCode ? 'Créer un nouveau code (l’ancien ne marchera plus)' : 'Créer mon code de connexion') + '</button></div>' :
       '<div class="card"><h2>Compte</h2><p class="muted" style="margin:0 0 12px">Connecté(e) : <b>' + esc(t.email || '') + '</b>.</p>' +
       '<button class="btn btn-danger-ghost btn-block" id="logoutBtn">Se déconnecter de ce téléphone</button></div>') +
       '<p class="tiny" style="text-align:center">ClasSos · version 2.0 · <b>' + SOS.SIGNATURE + '</b></p>';
@@ -660,6 +704,14 @@
       if (!needOnline()) return;
       api('PUT', '/teacher', { civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers: nums.length ? nums : DEFAULT_NUMBERS })
         .then(function () { sync(true); toast('Numéros d’urgence enregistrés', 'ok'); }, function (err) { toast(err.message, 'err'); });
+    };
+    var sc = $('showCode'); if (sc) sc.onclick = function () { codeModal(myCode, false); };
+    var nc = $('newCode'); if (nc) nc.onclick = function () {
+      var mk = function () {
+        if (!needOnline()) return;
+        api('POST', '/teacher/code').then(function (r) { try { localStorage.setItem(codeKey(t.id), r.code); } catch (e) {} sync(true); route(); codeModal(r.code, false); }, function (err) { toast(err.message, 'err'); });
+      };
+      if (myCode || t.hasCode) confirmModal('Créer un nouveau code ?', 'L’ancien code ne permettra plus de retrouver votre compte.', 'Nouveau code', mk); else mk();
     };
     if ($('pwForm')) $('pwForm').onsubmit = function (e) {
       e.preventDefault();

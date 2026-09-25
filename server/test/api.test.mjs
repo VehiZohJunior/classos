@@ -66,6 +66,16 @@ const HS = { Authorization: 'Bearer ' + r.body.token };
 r = await call('POST', '/classes', { name: 'Classe sans MDP' }, HS); ok(r.status === 200, 'compte sans mot de passe crée une classe');
 r = await call('GET', '/directory', null, HS); ok(r.body.classes.length === 1, 'compte sans mot de passe isolé');
 r = await call('GET', '/directory', null, HA); ok(!r.body.classes.some(function (c) { return c.name === 'Classe sans MDP'; }), 'A ne voit pas la classe du compte sans mot de passe');
+// Code de connexion : retrouver son compte ailleurs
+r = await call('POST', '/auth/start', { name: 'Prof Code' }); const code1 = r.body.code; const tC = r.body.token;
+ok(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{2}$/.test(code1 || ''), 'code de connexion fourni à la création');
+r = await call('POST', '/classes', { name: 'Classe du code' }, { Authorization: 'Bearer ' + tC });
+r = await call('POST', '/auth/code', { code: code1.toLowerCase().replace(/-/g, ' ') }); ok(r.status === 200 && r.body.teacher.name === 'Prof Code', 'retrouver le compte avec le code (minuscules, espaces)');
+r = await call('GET', '/directory', null, { Authorization: 'Bearer ' + r.body.token }); ok(r.body.classes.length === 1 && r.body.classes[0].name === 'Classe du code', 'répertoire retrouvé sur un autre téléphone');
+r = await call('POST', '/auth/code', { code: 'AAAA-BBBB-CC' }); ok(r.status === 401, 'mauvais code refusé');
+r = await call('POST', '/teacher/code', null, { Authorization: 'Bearer ' + tC }); const code2 = r.body.code; ok(code2 && code2 !== code1, 'nouveau code');
+r = await call('POST', '/auth/code', { code: code1 }); ok(r.status === 401, 'ancien code désactivé');
+r = await call('POST', '/auth/code', { code: code2 }); ok(r.status === 200, 'nouveau code accepté');
 r = await call('POST', '/auth/login', { email: 'compte-x@appareil.classos', password: '' }); ok(r.status === 401, 'impossible de se connecter par e-mail à un compte sans mot de passe');
 console.log(JSON.stringify({ devCandidate: A.email, tokenA: tA }));
 console.log(pass + ' réussis, ' + failN + ' échoué(s)');

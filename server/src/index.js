@@ -92,6 +92,17 @@ const DEVICE_DOMAIN = '@appareil.classos';
 const isDevice = (t) => String(t.email || '').endsWith(DEVICE_DOMAIN);
 const DEVICE_SESSION_DAYS = 3650; // compte sans mot de passe : le téléphone est la clé
 
+/* Code de connexion (sans mot de passe à inventer) : 10 caractères sans ambiguïté, ex. 7KQM-X3PD-9W */
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function loginCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  let s = '';
+  for (let i = 0; i < 10; i++) s += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return s.slice(0, 4) + '-' + s.slice(4, 8) + '-' + s.slice(8);
+}
+function normCode(c) { return String(c || '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^A-Z0-9]/g, ''); }
+async function codeHash(c) { return sha256('classos-code:' + normCode(c)); }
+
 async function createSession(env, teacherId, days) {
   const token = randomToken(32);
   const t = now();
@@ -120,7 +131,7 @@ function teacherPublic(t) {
   let numbers = [];
   try { numbers = JSON.parse(t.numbers || '[]'); } catch (e) {}
   const device = isDevice(t);
-  return { id: t.id, email: device ? '' : t.email, device, role: t.role, civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers };
+  return { id: t.id, email: device ? '' : t.email, device, hasCode: !!t.login_hash, role: t.role, civ: t.civ, name: t.name, subject: t.subject, school: t.school, phone: t.phone, numbers };
 }
 function studentOut(s) {
   let contacts = [];
@@ -206,10 +217,22 @@ async function handle(req, env) {
       const name = clip(b.name, 60);
       if (!name) fail(400, 'Indiquez votre nom.');
       const id = uid();
-      await env.DB.prepare('INSERT INTO teachers (id, email, pass_hash, pass_salt, name, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(id, 'compte-' + id.toLowerCase() + DEVICE_DOMAIN, randomToken(32), randomToken(16), name, now()).run();
+      const code = loginCode();
+      await env.DB.prepare('INSERT INTO teachers (id, email, pass_hash, pass_salt, name, created_at, login_hash) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, 'compte-' + id.toLowerCase() + DEVICE_DOMAIN, randomToken(32), randomToken(16), name, now(), await codeHash(code)).run();
       const t = await env.DB.prepare('SELECT * FROM teachers WHERE id = ?').bind(id).first();
-      return { token: await createSession(env, id, DEVICE_SESSION_DAYS), teacher: teacherPublic(t) };
+      return { token: await createSession(env, id, DEVICE_SESSION_DAYS), teacher: teacherPublic(t), code };
+    }
+    /* Retrouver son compte sur un autre téléphone / navigateur avec son code de connexion */
+    if (r[1] === 'code' && m === 'POST') {
+      await limit(env, 'code:' + ip, 10, 900000);
+      const b = await body();
+      const nc = normCode(b.code);
+      if (nc.length !== 10) fail(400, 'Le code comporte 10 caractères, par exemple 7KQM-X3PD-9W.');
+      const t = await env.DB.prepare('SELECT * FROM teachers WHERE login_hash = ?').bind(await codeHash(nc)).first();
+      if (!t) fail(401, 'Code incorrect. Vérifiez-le (il se trouve dans Réglages → Mon code de connexion).');
+      if (t.status !== 'active') fail(403, 'Ce compte est suspendu. Contactez le support ClasSos.');
+      return { token: await createSession(env, t.id, DEVICE_SESSION_DAYS), teacher: teacherPublic(t) };
     }
     if (r[1] === 'signup' && m === 'POST') {
       await limit(env, 'signup:' + ip, 8, 3600000);
@@ -257,6 +280,12 @@ async function handle(req, env) {
   if (r[0] === 'teacher') {
     const t = await auth(env, req);
     if (m === 'GET' && r.length === 1) return { teacher: teacherPublic(t) };
+    /* Nouveau code de connexion (l'ancien ne marche plus) */
+    if (m === 'POST' && r[1] === 'code') {
+      const code = loginCode();
+      await env.DB.prepare('UPDATE teachers SET login_hash = ? WHERE id = ?').bind(await codeHash(code), t.id).run();
+      return { code };
+    }
     if (m === 'PUT' && r.length === 1) {
       const b = await body();
       const name = clip(b.name, 60);

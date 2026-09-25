@@ -1,5 +1,5 @@
 /* ClasSos — service worker : l'appli fonctionne sans Internet */
-var CACHE = 'classos-v14';
+var CACHE = 'classos-v15';
 var FILES = [
   './', './index.html', './redirect.js', './style.css', './common.js', './config.js',
   './admin/', './admin/index.html', './admin/app.js',
